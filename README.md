@@ -16,14 +16,13 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 | Göktaşı | Göktaşı avı | [`goktasi/`](goktasi/) |
 | İniş Penceresi | Ay'a iniş | [`inis-penceresi/`](inis-penceresi/) |
 | Lunapark Pinball | Pinball | [`lunapark-pinball/`](lunapark-pinball/) |
-| Sazlık Avı | Ördek avı | [`sazlik-avi/`](sazlik-avi/) |
 
 ## Oynamak
 
 - **Çevrimiçi:** GitHub Pages açıkken `https://fundasarikaya.github.io/mobil-oyunlar/` adresinden oyun seçilir.
 - **Yerelde:** Herhangi bir oyunun `index.html` dosyasını tarayıcıda açmak yeterli.
 
-Sazlık Avı dışındaki oyunların menüsünde **Kılavuz** bölümü nasıl oynandığını anlatır; Sazlık Avı kuralları başlangıç ekranında yazar.
+Her oyunun menüsünde **Kılavuz** bölümü nasıl oynandığını anlatır.
 
 ## Yapı
 

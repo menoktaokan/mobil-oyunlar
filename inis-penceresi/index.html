@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>İniş Penceresi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Red+Hat+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: telemetry strip, then the zooming landing view in the top 80%; bottom 20% is a three-key control deck (rotate left, thrust, rotate right). One deliberate mission-control look. */
+:root{
+  --space:#05070b; --deck:#14171c; --deck2:#0c0e12; --green:#7dff9b; --amber:#ffb63a; --red:#ff5a4a;
+  --steel:#c9d1db; --muted:#7c8794; --line:#2a313b;
+  --f-display:"Archivo Black",Impact,system-ui,sans-serif;
+  --f-mono:"Red Hat Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--space);color:var(--steel)}
+body{font-family:var(--f-mono);touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+#stage{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);bottom:env(safe-area-inset-bottom,0px);display:flex;justify-content:center;background:var(--space)}
+#wrap{position:relative;height:100%;overflow:hidden;background:var(--space)}
+canvas{display:block}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+#panel{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:10px;padding-block:12px 14px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));background:linear-gradient(var(--deck),var(--deck2));border-top:2px solid var(--line);box-sizing:border-box;z-index:4}
+.k{border:2px solid #3a4350;border-radius:10px;background:#1c2028;color:var(--steel);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-weight:700;font-size:11px;letter-spacing:.12em;text-transform:uppercase;touch-action:none;min-width:0;box-shadow:inset 0 -5px 0 rgba(0,0,0,.35)}
+.k svg{width:28px;height:28px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.k.on{background:#2a303a;box-shadow:inset 0 -2px 0 rgba(0,0,0,.35);transform:translateY(2px)}
+#thrustBtn{border-color:var(--amber);color:var(--amber);font-size:14px;background:#2a2112}
+#thrustBtn.on{background:#4a3410;box-shadow:0 0 18px rgba(255,182,58,.45),inset 0 -2px 0 rgba(0,0,0,.35)}
+#thrustBtn small{font-size:9px;letter-spacing:.06em;color:#c99a4a;font-weight:500;text-transform:none}
+#pauseBtn{position:absolute;z-index:5;top:6px;right:max(6px,env(safe-area-inset-right,0px));width:32px;height:28px;display:grid;place-items:center;border:0;background:transparent;color:var(--steel)}
+#pauseBtn::before{content:"";width:9px;height:11px;border-left:3px solid currentColor;border-right:3px solid currentColor;box-sizing:border-box}
+
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:100%;overflow-y:auto;touch-action:pan-y;z-index:6;display:flex;flex-direction:column;gap:14px;padding-block:18px 22px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--deck2);border-top:3px solid var(--amber);box-shadow:0 -14px 36px rgba(0,0,0,.6)}
+.tag{margin:0;font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--amber)}
+h1,h2{font-family:var(--f-display);font-weight:400;margin:0;line-height:.95;text-transform:uppercase;color:#eef2f6;text-wrap:balance}
+h1{font-size:clamp(36px,11.5vw,50px)}
+h2{font-size:28px}
+.lede{margin:0;font-size:13.5px;line-height:1.55;color:#aeb8c3;max-width:38ch}
+.limits{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin:0}
+.limits div{background:var(--deck2);padding:9px 10px;min-width:0}
+.limits dt{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0 0 3px}
+.limits dd{margin:0;font-size:15px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums}
+.missions{list-style:none;margin:0;padding:0;display:grid;gap:1px;background:var(--line);border:1px solid var(--line)}
+.missions li{display:grid;grid-template-columns:22px 1fr auto;gap:10px;align-items:baseline;padding:8px 10px;background:var(--deck2);font-size:12.5px;min-width:0}
+.missions li span:first-child{color:var(--muted)}
+.missions li b{color:#eef2f6;font-weight:700}
+.missions li em{font-style:normal;color:var(--muted);font-size:11px;white-space:nowrap}
+.missions li.done b{color:var(--green)}
+.row{display:flex;gap:10px}
+.row > *{min-width:0}
+.go{flex:1;height:54px;border:0;border-radius:10px;background:var(--amber);color:#1a1205;font-family:var(--f-display);font-size:18px;text-transform:uppercase;letter-spacing:.04em;box-shadow:inset 0 -5px 0 rgba(0,0,0,.2)}
+.go:active{transform:translateY(2px)}
+.alt{height:54px;padding:0 14px;border:2px solid #3a4350;border-radius:10px;background:transparent;color:var(--steel);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase}
+.alt[aria-pressed="false"]{color:var(--muted)}
+.best{display:flex;justify-content:space-between;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+.best output{color:var(--amber);letter-spacing:0;font-variant-numeric:tabular-nums}
+.report{display:grid;grid-template-columns:1fr auto;gap:6px 12px;margin:0;font-size:13px}
+.report dt{color:var(--muted)}
+.report dd{margin:0;text-align:right;font-weight:700;color:#eef2f6;font-variant-numeric:tabular-nums}
+.report dd.ok{color:var(--green)} .report dd.bad{color:var(--red)}
+.big{margin:0;font-family:var(--f-display);font-size:40px;line-height:1;color:#eef2f6;font-variant-numeric:tabular-nums}
+.badge{align-self:flex-start;background:var(--green);color:#06210e;font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:5px 8px;border-radius:4px}
+
+.guide-list{list-style:none;margin:0;padding:0;display:grid;gap:12px}
+.guide-list li{font-size:14px;line-height:1.45;min-width:0}
+.guide-list b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
+#guide{z-index:9}
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="wrap">
+    <canvas id="cv" aria-label="İniş görüntüsü"></canvas>
+    <button id="pauseBtn" aria-label="Duraklat" hidden></button>
+    <div id="panel">
+      <button class="k" id="leftBtn" aria-label="Sola yatır"><svg viewBox="0 0 24 24"><path d="M19 13a7 7 0 1 1-3-8"/><path d="M17 2v4h-4"/></svg>Sola</button>
+      <button class="k" id="thrustBtn" aria-label="Ana motor"><svg viewBox="0 0 24 24"><path d="M8 3h8l-1 9H9z"/><path d="M9 15l3 6 3-6"/></svg>İtiş<small>basılı tut</small></button>
+      <button class="k" id="rightBtn" aria-label="Sağa yatır"><svg viewBox="0 0 24 24"><path d="M5 13a7 7 0 1 0 3-8"/><path d="M7 2v4h4"/></svg>Sağa</button>
+    </div>
+
+    <section id="menu" class="sheet" aria-labelledby="t-menu">
+      <p class="tag">Görev kontrol · altı gök cismi</p>
+      <h1 id="t-menu">İniş Penceresi</h1>
+      <p class="lede">İniş aracını Ay'dan Titan'a farklı yüzeylere yumuşakça indir.</p>
+      <div class="row">
+        <button class="go" id="startBtn">Ayrıl ve in</button>
+        <button class="alt" id="muteBtn" aria-pressed="true">Ses</button>
+        <button class="alt" id="guideBtn">Kılavuz</button>
+      </div>
+      <div class="best">En yüksek skor <output id="bestOut">0</output></div>
+    </section>
+
+    <section id="guide" class="sheet" hidden aria-labelledby="t-guide">
+      <p class="tag">Kılavuz</p>
+      <h2 id="t-guide">Nasıl oynanır</h2>
+      <ul class="guide-list">
+        <li><b>Kontrol</b>Sola ve Sağa tuşları aracı yatırır; bırakınca araç o açıda kalır, düzeltmek sana kalmış. İtiş tuşunu basılı tuttukça ana motor çalışır.</li>
+        <li><b>Güvenli iniş</b>Yeşil pistlerden birine in. Dikey hız 3,5 m/s, yatay hız 2,2 m/s ve eğim 12° altında olmalı; iki ayak da pistin üstünde olmalı.</li>
+        <li><b>Pistler</b>Pist daraldıkça puan çarpanı artar.</li>
+        <li><b>Telemetri</b>Üstte irtifa, hızlar, eğim ve yakıt görünür. Yere yaklaşırken sınırı aşan değer kırmızıya döner.</li>
+        <li><b>Yakıt</b>Bütün görevler aynı depodan yakar. Yumuşak iniş biraz yakıt kazandırır. Üç aracın var.</li>
+        <li><b>Görevler</b>Ay, Mars, Europa, Titan ve Merkür. Mars ve Merkür&#x27;de yerçekimi güçlü, Titan&#x27;da hava yoğun ve rüzgârlı. Görevler bitince daha zor bir tur başlar.</li>
+        <li><b>Klavye</b>← → yatır, ↑ ya da Boşluk itiş.</li>
+      </ul>
+      <button class="go" id="guideClose">Anladım</button>
+    </section>
+
+    <section id="report" class="sheet" hidden aria-labelledby="t-rep">
+      <p class="tag" id="repTag">Görev 1 · Ay</p>
+      <h2 id="t-rep">Kartal kondu</h2>
+      <dl class="report" id="repList"></dl>
+      <p class="big" id="repScore">0</p>
+      <div class="row"><button class="go" id="nextBtn">Sonraki görev</button></div>
+    </section>
+
+    <section id="pause" class="sheet" hidden aria-labelledby="t-pause">
+      <p class="tag">Sayaç durdu</p>
+      <h2 id="t-pause">Duraklatıldı</h2>
+      <div class="row">
+        <button class="go" id="resumeBtn">Devam</button>
+        <button class="alt" id="muteBtn2" aria-pressed="true">Ses</button>
+      </div>
+      <button class="alt" id="quitBtn">Görevi iptal et</button>
+    </section>
+
+    <section id="over" class="sheet" hidden aria-labelledby="t-over">
+      <p class="tag" id="overTag">Görev sona erdi</p>
+      <h2 id="t-over">Program askıya alındı</h2>
+      <span class="badge" id="newBest" hidden>Yeni rekor</span>
+      <p class="big" id="fScore">0</p>
+      <dl class="report" id="overList"></dl>
+      <div class="row">
+        <button class="go" id="againBtn">Yeni program</button>
+        <button class="alt" id="homeBtn">Menü</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+const TAU = Math.PI * 2;
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString('tr-TR');
+const f1 = n => (Math.round(n * 10) / 10).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/* ---------- layout ---------- */
+const W = 360, TOPH = 54;
+let H = 640, S = 1, DPR = 1, GH = 512, PH = 128;
+const stage = $('stage'), wrap = $('wrap'), cv = $('cv'), ctx = cv.getContext('2d');
+function resize() {
+  const sw = stage.clientWidth, sh = stage.clientHeight;
+  const ww = Math.min(sw, Math.round(sh * 0.6));
+  wrap.style.width = ww + 'px'; wrap.style.height = sh + 'px';
+  S = ww / W; H = Math.max(520, Math.round(sh / S));
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(ww * DPR); cv.height = Math.round(sh * DPR);
+  cv.style.width = ww + 'px'; cv.style.height = sh + 'px';
+  PH = Math.max(96, Math.round(H * 0.2)); GH = H - PH;
+  $('panel').style.height = (PH * S) + 'px';
+}
+
+/* ---------- missions ---------- */
+const MISSIONS = [
+  { body: 'Ay', site: 'Sükûnet Denizi', g: 1.62, drag: 0, wind: 0, amp: 70, rough: 0.5, pads: [90, 60, 40], ground: ['#8d8f94', '#45474c'], sky: null, earth: true, fuelBack: 220 },
+  { body: 'Ay', site: 'Tycho Krateri', g: 1.62, drag: 0, wind: 0, amp: 140, rough: 0.8, pads: [60, 45, 35], ground: ['#9a9a9e', '#3d3e43'], sky: null, earth: true, fuelBack: 200 },
+  { body: 'Mars', site: 'Jezero Krateri', g: 3.71, drag: 0.02, wind: 0.6, amp: 110, rough: 0.6, pads: [70, 50, 35], ground: ['#c06a3e', '#5a2a18'], sky: ['#3b1f1a', '#b6774e'], earth: false, fuelBack: 220 },
+  { body: 'Europa', site: 'Conamara Kaosu', g: 1.31, drag: 0, wind: 0, amp: 180, rough: 0.9, pads: [55, 45, 35], ground: ['#e3ecf2', '#7d93a6'], sky: null, earth: false, jupiter: true, fuelBack: 200 },
+  { body: 'Titan', site: 'Kraken Kıyısı', g: 1.35, drag: 0.1, wind: 0.7, amp: 90, rough: 0.5, pads: [65, 50, 35], ground: ['#a8743c', '#4a2f17'], sky: ['#5a3d1c', '#c59a52'], earth: false, haze: true, fuelBack: 220 },
+  { body: 'Merkür', site: 'Caloris Havzası', g: 3.7, drag: 0, wind: 0, amp: 150, rough: 0.8, pads: [50, 40, 30], ground: ['#7d7671', '#2f2b29'], sky: null, earth: false, sun: true, fuelBack: 180 }
+];
+const padMult = w => w >= 80 ? 1 : w >= 55 ? 2 : w >= 45 ? 3 : w >= 35 ? 4 : 5;
+const WW = 1600, STEP = 5;
+function seeded(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+function genTerrain(M, seed) {
+  const rnd = seeded(seed), N = WW / STEP + 1, h = new Array(N);
+  const ph = [rnd() * 6, rnd() * 6, rnd() * 6, rnd() * 6];
+  for (let i = 0; i < N; i++) {
+    const x = i * STEP;
+    h[i] = 120 + M.amp * (0.45 * Math.sin(x / 210 + ph[0]) + 0.3 * Math.sin(x / 97 + ph[1]) + 0.15 * M.rough * Math.sin(x / 37 + ph[2]) + 0.08 * M.rough * Math.sin(x / 13 + ph[3]));
+    h[i] += (rnd() - 0.5) * 6 * M.rough;
+  }
+  // edge mountains
+  for (let i = 0; i < N; i++) { const x = i * STEP, e = Math.min(x, WW - x); if (e < 120) h[i] += (120 - e) * 2.4; }
+  // pads
+  const pads = [];
+  const slots = [0.28, 0.5, 0.72, 0.9];
+  const widths = M.pads.slice().sort(() => rnd() - 0.5);
+  widths.forEach((w, k) => {
+    const cx = Math.round((WW * slots[k] + (rnd() - 0.5) * 100) / STEP) * STEP;
+    const x0 = cx - Math.floor(w / 2 / STEP) * STEP, x1 = x0 + w;
+    const i0 = x0 / STEP, i1 = x1 / STEP;
+    let avg = 0; for (let i = i0; i <= i1; i++) avg += h[i]; avg /= (i1 - i0 + 1);
+    for (let i = i0; i <= i1; i++) h[i] = avg;
+    // soften the approach
+    for (let k2 = 1; k2 <= 4; k2++) { h[i0 - k2] = lerp(h[i0 - k2], avg, (5 - k2) / 5); h[i1 + k2] = lerp(h[i1 + k2], avg, (5 - k2) / 5); }
+    pads.push({ x0, x1, y: avg, mult: padMult(w) });
+  });
+  return { h, pads };
+}
+function groundAt(x) {
+  x = clamp(x, 0, WW); const i = Math.min(T.h.length - 2, Math.floor(x / STEP)), t = (x - i * STEP) / STEP;
+  return lerp(T.h[i], T.h[i + 1], t);
+}
+
+/* ---------- audio ---------- */
+let AC = null, master = null, nbuf = null, muted = false, engine = null;
+function audioInit() {
+  if (AC) { if (AC.state === 'suspended') AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    master = AC.createGain(); master.gain.value = 0.32; master.connect(AC.destination);
+    nbuf = AC.createBuffer(1, AC.sampleRate * 2, AC.sampleRate);
+    const d = nbuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  } catch (e) { AC = null; }
+}
+function tone(f, dur, type, vol, slide, delay) {
+  if (!AC || muted) return;
+  const t = AC.currentTime + (delay || 0), o = AC.createOscillator(), g = AC.createGain();
+  o.type = type || 'sine'; o.frequency.setValueAtTime(f, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, f + slide), t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.03);
+}
+function noise(dur, vol, cut) {
+  if (!AC || muted) return;
+  const t = AC.currentTime, s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+  s.buffer = nbuf; f.type = 'lowpass'; f.frequency.setValueAtTime(cut, t); f.frequency.exponentialRampToValueAtTime(50, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+  s.connect(f); f.connect(g); g.connect(master); s.start(t); s.stop(t + dur + 0.05);
+}
+function engineSound(on) {
+  if (!AC || muted) on = false;
+  if (on && !engine) {
+    const s = AC.createBufferSource(), f = AC.createBiquadFilter(), g = AC.createGain();
+    s.buffer = nbuf; s.loop = true; f.type = 'lowpass'; f.frequency.value = 340; g.gain.value = 0.0001;
+    s.connect(f); f.connect(g); g.connect(master); s.start(); g.gain.setTargetAtTime(0.32, AC.currentTime, 0.05);
+    engine = { s, g };
+  } else if (!on && engine) {
+    const e = engine; engine = null; e.g.gain.setTargetAtTime(0.0001, AC.currentTime, 0.06); try { e.s.stop(AC.currentTime + 0.3); } catch (x) {}
+  }
+}
+const lastS = {};
+function sfx(n) {
+  if (!AC || muted) return;
+  const now = performance.now(), gap = { warn: 450, low: 900 }[n] || 0;
+  if (gap && now - (lastS[n] || 0) < gap) return; lastS[n] = now;
+  switch (n) {
+    case 'warn': tone(1200, 0.08, 'square', 0.05); break;
+    case 'low': tone(700, 0.12, 'square', 0.05); tone(700, 0.12, 'square', 0.05, 0, 0.2); break;
+    case 'land': [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.25, 'sine', 0.12, 0, i * 0.1)); noise(0.3, 0.15, 400); break;
+    case 'crash': noise(1.4, 0.7, 1400); tone(110, 0.9, 'sawtooth', 0.12, -70); break;
+    case 'tick': tone(1600, 0.02, 'square', 0.03); break;
+  }
+}
+
+/* ---------- storage ---------- */
+let best = 0;
+try { best = parseInt(localStorage.getItem('inis_best') || '0', 10) || 0; } catch (e) {}
+try { muted = localStorage.getItem('inis_mute') === '1'; } catch (e) {}
+
+/* ---------- state ---------- */
+let state = 'menu', mi = 0, round = 0, M = MISSIONS[0], T = null;
+let L = null, fuel = 1000, landers = 3, score = 0, landings = 0, cam = { x: 0, y: 0, ppm: 1 }, parts = [], stars = [], clock = 0, endT = 0, windNow = 0, outcome = null;
+const input = { left: false, right: false, thrust: false };
+const FEET = [[-4.2, -3.6], [4.2, -3.6]], BODY = [[-3, -0.5], [3, -0.5], [0, 3.6], [-2.4, 2.2], [2.4, 2.2]];
+
+function makeStars() { stars = []; for (let i = 0; i < 120; i++) stars.push({ x: Math.random(), y: Math.random(), a: rand(0.15, 0.8), s: Math.random() < 0.1 ? 1.4 : 0.8 }); }
+function loadMission(i) {
+  mi = i % MISSIONS.length; round = Math.floor(i / MISSIONS.length); M = MISSIONS[mi];
+  T = genTerrain(M, 1234 + i * 71);
+  const near = T.pads.slice().sort((a, b) => a.x0 - b.x0)[0];
+  const sx = clamp((near.x0 + near.x1) / 2 - rand(130, 220), 140, WW - 140);
+  L = { x: sx, y: Math.max(groundAt(sx), near.y) + 210 + round * 30, vx: rand(5, 8) + round * 2, vy: -1, a: 0, alive: true, landed: false, thrusting: false };
+  parts = []; outcome = null; endT = 0; windNow = 0;
+  cam.x = L.x; cam.y = L.y - 100; cam.ppm = 0.7;
+}
+function localToWorld(lx, ly) { const c = Math.cos(L.a), s = Math.sin(L.a); return [L.x + lx * c + ly * s, L.y - lx * s + ly * c]; }
+function padUnder(x0, x1) { return T.pads.find(p => x0 >= p.x0 - 0.5 && x1 <= p.x1 + 0.5); }
+
+/* ---------- update ---------- */
+function update(dt) {
+  clock += dt;
+  if (!L.alive || L.landed) { tickParts(dt); engineSound(false); if (endT > 0) { endT -= dt; if (endT <= 0) afterTouchdown(); } return; }
+  const rot = 1.15;
+  if (input.left) L.a -= rot * dt;
+  if (input.right) L.a += rot * dt;
+  L.a = clamp(L.a, -Math.PI / 2, Math.PI / 2);
+  const thrustA = M.g * 2.5;
+  L.thrusting = input.thrust && fuel > 0;
+  let ax = 0, ay = -M.g;
+  if (L.thrusting) { ax += Math.sin(L.a) * thrustA; ay += Math.cos(L.a) * thrustA; fuel = Math.max(0, fuel - 14 * dt); }
+  engineSound(L.thrusting);
+  if (M.wind) { windNow = Math.sin(clock * 0.35) * M.wind + Math.sin(clock * 1.3 + 2) * M.wind * 0.4; ax += windNow; }
+  if (M.drag) { ax -= L.vx * M.drag; ay -= L.vy * M.drag; }
+  const n = 4, h = dt / n;
+  for (let i = 0; i < n && L.alive && !L.landed; i++) {
+    L.vx += ax * h; L.vy += ay * h; L.x += L.vx * h; L.y += L.vy * h;
+    if (L.x < 5) { L.x = 5; L.vx = Math.abs(L.vx) * 0.3; }
+    if (L.x > WW - 5) { L.x = WW - 5; L.vx = -Math.abs(L.vx) * 0.3; }
+    contact();
+  }
+  if (L.thrusting && Math.random() < 0.9) {
+    const [fx, fy] = localToWorld(0, -4.6);
+    const sp = rand(14, 26);
+    parts.push({ k: 'flame', x: fx, y: fy, vx: -Math.sin(L.a) * sp + L.vx + rand(-2, 2), vy: -Math.cos(L.a) * sp + L.vy + rand(-2, 2), life: rand(0.25, 0.45), max: 0.45 });
+    const alt = fy - groundAt(fx);
+    if (alt < 30 && Math.random() < 0.6) parts.push({ k: 'dust', x: fx + rand(-6, 6), y: groundAt(fx) + 0.5, vx: (Math.random() < 0.5 ? -1 : 1) * rand(6, 22), vy: rand(0, 3), life: rand(0.6, 1.2), max: 1.2 });
+  }
+  tickParts(dt);
+  // warnings
+  const alt = L.y - 3.6 - groundAt(L.x);
+  if (alt < 60 && L.vy < -3.2) sfx('warn');
+  if (fuel < 150 && fuel > 0) sfx('low');
+}
+function contact() {
+  for (const [bx, by] of BODY) { const [wx, wy] = localToWorld(bx, by); if (wy <= groundAt(wx)) { crash('Gövde yüzeye çarptı'); return; } }
+  const f = FEET.map(([lx, ly]) => localToWorld(lx, ly));
+  const touch = f.some(([x, y]) => y <= groundAt(x));
+  if (!touch) return;
+  const minX = Math.min(f[0][0], f[1][0]), maxX = Math.max(f[0][0], f[1][0]);
+  const pad = padUnder(minX, maxX);
+  const vy = -L.vy, vx = Math.abs(L.vx), ang = Math.abs(L.a) * 180 / Math.PI;
+  if (!pad) { crash(ang > 12 ? 'Eğimli zemine yan yattı' : 'Pistin dışına indi'); return; }
+  if (vy > 3.5) { crash('Dikey hız ' + f1(vy) + ' m/s, sınır 3,5'); return; }
+  if (vx > 2.2) { crash('Yatay hız ' + f1(vx) + ' m/s, sınır 2,2'); return; }
+  if (ang > 12) { crash('Eğim ' + Math.round(ang) + '°, sınır 12°'); return; }
+  // landed
+  L.landed = true; L.y = pad.y + 3.6; L.a = 0;
+  const center = 1 - Math.abs((L.x - (pad.x0 + pad.x1) / 2) / ((pad.x1 - pad.x0) / 2));
+  const soft = clamp(1 - vy / 3.5, 0, 1);
+  const base = 100 * pad.mult, softPts = Math.round(150 * soft * pad.mult), centerPts = Math.round(80 * clamp(center, 0, 1) * pad.mult);
+  const fuelBack = Math.round(M.fuelBack * 1.4 * (0.5 + soft * 0.5) / (1 + round * 0.5));
+  outcome = { ok: true, pad, vy, vx, ang, base, softPts, centerPts, fuelBack, total: base + softPts + centerPts };
+  score += outcome.total; landings++; fuel = Math.min(1800, fuel + fuelBack);
+  for (let i = 0; i < 24; i++) parts.push({ k: 'dust', x: L.x + rand(-5, 5), y: pad.y + 0.5, vx: (Math.random() < 0.5 ? -1 : 1) * rand(4, 14), vy: rand(0, 2), life: rand(0.8, 1.6), max: 1.6 });
+  sfx('land'); endT = 1.6;
+}
+function crash(reason) {
+  L.alive = false; landers--;
+  outcome = { ok: false, reason, vy: -L.vy, vx: Math.abs(L.vx), ang: Math.abs(L.a) * 180 / Math.PI };
+  for (let i = 0; i < 50; i++) { const a = rand(0, TAU), s = rand(5, 30); parts.push({ k: 'spark', x: L.x, y: L.y, vx: Math.cos(a) * s + L.vx * 0.3, vy: Math.abs(Math.sin(a)) * s, life: rand(0.6, 1.6), max: 1.6, g: true }); }
+  for (let i = 0; i < 8; i++) parts.push({ k: 'chunk', x: L.x, y: L.y, vx: rand(-14, 14), vy: rand(4, 18), rot: rand(0, 6), vr: rand(-6, 6), life: 2.5, max: 2.5, g: true });
+  sfx('crash'); try { navigator.vibrate && navigator.vibrate(220); } catch (e) {}
+  endT = 1.8;
+}
+function tickParts(dt) {
+  for (const p of parts) {
+    p.life -= dt;
+    if (p.g) p.vy -= M.g * dt;
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.k === 'dust') { p.vx *= 1 - dt * 1.5; p.vy -= M.g * 0.2 * dt; }
+    if (p.g && p.y < groundAt(p.x)) { p.y = groundAt(p.x); p.vy = -p.vy * 0.3; p.vx *= 0.6; }
+    if (p.rot !== undefined) p.rot += p.vr * dt;
+  }
+  parts = parts.filter(p => p.life > 0);
+}
+
+/* ---------- render ---------- */
+function setSp(v) { if ('letterSpacing' in ctx) ctx.letterSpacing = v; }
+function txt(t, x, y, font, col, align, sp) { ctx.font = font; ctx.fillStyle = col; ctx.textAlign = align || 'left'; ctx.textBaseline = 'alphabetic'; setSp(sp || '0px'); ctx.fillText(t, x, y); setSp('0px'); }
+function updCam(dt) {
+  const alt = Math.max(0, L.y - groundAt(L.x));
+  const k = clamp(1 - alt / 230, 0, 1), ease = k * k * (3 - 2 * k);
+  const ppm = lerp(0.62, 3.4, ease);
+  cam.ppm += (ppm - cam.ppm) * Math.min(1, dt * 2.5);
+  const viewW = W / cam.ppm, viewH = (GH - TOPH) / cam.ppm;
+  const tx = clamp(L.x, viewW / 2, WW - viewW / 2);
+  const ty = Math.max(L.y - viewH * 0.12, (L.y + groundAt(L.x)) / 2);
+  cam.x += (tx - cam.x) * Math.min(1, dt * 4); cam.y += (ty - cam.y) * Math.min(1, dt * 4);
+}
+function sx(x) { return W / 2 + (x - cam.x) * cam.ppm; }
+function sy(y) { return TOPH + (GH - TOPH) / 2 - (y - cam.y) * cam.ppm; }
+function drawLander() {
+  const p = cam.ppm;
+  ctx.save(); ctx.translate(sx(L.x), sy(L.y)); ctx.rotate(L.a); ctx.scale(p, p);
+  const lw = 1 / p;
+  // legs
+  ctx.strokeStyle = '#c9d1db'; ctx.lineWidth = Math.max(0.35, 1.2 * lw);
+  ctx.beginPath(); ctx.moveTo(-2.6, 0.6); ctx.lineTo(-4.2, 3.6); ctx.moveTo(2.6, 0.6); ctx.lineTo(4.2, 3.6); ctx.moveTo(-1.4, 0.9); ctx.lineTo(-4.2, 3.6); ctx.moveTo(1.4, 0.9); ctx.lineTo(4.2, 3.6); ctx.stroke();
+  ctx.fillStyle = '#c9d1db'; ctx.fillRect(-5, 3.4, 1.6, 0.4); ctx.fillRect(3.4, 3.4, 1.6, 0.4);
+  // descent stage (gold foil)
+  const g = ctx.createLinearGradient(-3, 0, 3, 0); g.addColorStop(0, '#8a6420'); g.addColorStop(0.45, '#f2c14e'); g.addColorStop(1, '#8a6420');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-3.2, -0.6); ctx.lineTo(3.2, -0.6); ctx.lineTo(2.8, 1.6); ctx.lineTo(-2.8, 1.6); ctx.closePath(); ctx.fill();
+  // ascent stage
+  ctx.fillStyle = '#d6dbe2'; ctx.beginPath(); ctx.moveTo(-2.4, -0.6); ctx.lineTo(-2.2, -3); ctx.lineTo(-0.8, -3.7); ctx.lineTo(1.6, -3.5); ctx.lineTo(2.5, -2.2); ctx.lineTo(2.4, -0.6); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#2a313b'; ctx.beginPath(); ctx.moveTo(-1.6, -2.3); ctx.lineTo(-0.6, -3); ctx.lineTo(-0.4, -1.9); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#7c8794'; ctx.fillRect(-0.15, -4.6, 0.3, 1);
+  // nozzle
+  ctx.fillStyle = '#4a515c'; ctx.beginPath(); ctx.moveTo(-0.9, 1.6); ctx.lineTo(0.9, 1.6); ctx.lineTo(1.3, 2.6); ctx.lineTo(-1.3, 2.6); ctx.closePath(); ctx.fill();
+  if (L.thrusting) {
+    const fl = 2.4 + Math.random() * 1.6;
+    const fg = ctx.createLinearGradient(0, 2.6, 0, 2.6 + fl * 2);
+    fg.addColorStop(0, 'rgba(255,240,200,0.95)'); fg.addColorStop(0.4, 'rgba(255,182,58,0.8)'); fg.addColorStop(1, 'rgba(255,90,74,0)');
+    ctx.fillStyle = fg; ctx.beginPath(); ctx.moveTo(-1.1, 2.6); ctx.lineTo(0, 2.6 + fl * 2); ctx.lineTo(1.1, 2.6); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawWorld() {
+  // sky
+  if (M.sky) { const g = ctx.createLinearGradient(0, TOPH, 0, GH); g.addColorStop(0, M.sky[0]); g.addColorStop(1, M.sky[1]); ctx.fillStyle = g; }
+  else ctx.fillStyle = '#05070b';
+  ctx.fillRect(0, TOPH, W, GH - TOPH);
+  if (!M.haze) for (const s of stars) { ctx.globalAlpha = M.sky ? s.a * 0.35 : s.a; ctx.fillStyle = '#e8eef5'; const x = ((s.x * W * 1.5 - cam.x * 0.05 * cam.ppm) % W + W) % W; ctx.fillRect(x, TOPH + s.y * (GH - TOPH), s.s, s.s); }
+  ctx.globalAlpha = 1;
+  if (M.earth) { const x = W * 0.78, y = TOPH + 46; ctx.fillStyle = '#2b6cb0'; ctx.beginPath(); ctx.arc(x, y, 13, 0, TAU); ctx.fill(); ctx.fillStyle = '#e8eef5'; ctx.globalAlpha = 0.7; ctx.beginPath(); ctx.arc(x - 3, y - 3, 4, 0, TAU); ctx.arc(x + 5, y + 4, 3, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(5,7,11,0.85)'; ctx.beginPath(); ctx.arc(x + 6, y, 13, -Math.PI / 2, Math.PI / 2); ctx.fill(); }
+  if (M.jupiter) { const x = W * 0.25, y = TOPH + 70; ctx.save(); ctx.beginPath(); ctx.arc(x, y, 42, 0, TAU); ctx.clip(); for (let i = -6; i < 7; i++) { ctx.fillStyle = i % 2 ? '#c9a27a' : '#e8d2b0'; ctx.fillRect(x - 44, y + i * 7, 88, 7); } ctx.fillStyle = '#b5543a'; ctx.beginPath(); ctx.ellipse(x + 12, y + 12, 8, 5, 0, 0, TAU); ctx.fill(); ctx.restore(); }
+  if (M.sun) { const g = ctx.createRadialGradient(W * 0.8, TOPH + 40, 0, W * 0.8, TOPH + 40, 70); g.addColorStop(0, 'rgba(255,250,230,1)'); g.addColorStop(0.2, 'rgba(255,230,170,0.7)'); g.addColorStop(1, 'rgba(255,230,170,0)'); ctx.fillStyle = g; ctx.fillRect(W * 0.8 - 70, TOPH - 30, 140, 140); }
+  // terrain
+  const x0 = cam.x - W / 2 / cam.ppm, x1 = cam.x + W / 2 / cam.ppm;
+  const i0 = Math.max(0, Math.floor(x0 / STEP) - 1), i1 = Math.min(T.h.length - 1, Math.ceil(x1 / STEP) + 1);
+  const gg = ctx.createLinearGradient(0, sy(cam.y + 60), 0, GH);
+  gg.addColorStop(0, M.ground[0]); gg.addColorStop(1, M.ground[1]);
+  ctx.fillStyle = gg;
+  ctx.beginPath(); ctx.moveTo(sx(i0 * STEP), GH + 2);
+  for (let i = i0; i <= i1; i++) ctx.lineTo(sx(i * STEP), sy(T.h[i]));
+  ctx.lineTo(sx(i1 * STEP), GH + 2); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1;
+  ctx.beginPath(); for (let i = i0; i <= i1; i++) { const X = sx(i * STEP), Y = sy(T.h[i]); i === i0 ? ctx.moveTo(X, Y) : ctx.lineTo(X, Y); } ctx.stroke();
+  // pads
+  for (const p of T.pads) {
+    const a = sx(p.x0), b = sx(p.x1), y = sy(p.y);
+    if (b < -20 || a > W + 20) continue;
+    ctx.fillStyle = '#7dff9b'; ctx.fillRect(a, y - 1.5, b - a, 3);
+    const blink = Math.floor(clock * 2) % 2 === 0;
+    ctx.fillStyle = blink ? '#7dff9b' : '#2a5a36'; ctx.beginPath(); ctx.arc(a, y - 3, 2, 0, TAU); ctx.arc(b, y - 3, 2, 0, TAU); ctx.fill();
+    txt('×' + p.mult, (a + b) / 2, y + 14, '700 11px "Red Hat Mono", monospace', '#7dff9b', 'center');
+  }
+  if (M.haze) { const g = ctx.createLinearGradient(0, TOPH, 0, GH); g.addColorStop(0, 'rgba(197,154,82,0.55)'); g.addColorStop(1, 'rgba(197,154,82,0.15)'); ctx.fillStyle = g; ctx.fillRect(0, TOPH, W, GH - TOPH); }
+  // particles
+  for (const p of parts) {
+    const a = clamp(p.life / p.max, 0, 1), X = sx(p.x), Y = sy(p.y);
+    ctx.globalAlpha = a;
+    if (p.k === 'flame') { ctx.fillStyle = a > 0.6 ? '#fff0c8' : '#ffb63a'; ctx.fillRect(X - 1, Y - 1, 2, 2); }
+    else if (p.k === 'dust') { ctx.fillStyle = M.ground[0]; ctx.beginPath(); ctx.arc(X, Y, 1.5 + (1 - a) * 3, 0, TAU); ctx.fill(); }
+    else if (p.k === 'spark') { ctx.fillStyle = a > 0.5 ? '#ffd27a' : '#ff5a4a'; ctx.fillRect(X - 1, Y - 1, 2, 2); }
+    else { ctx.save(); ctx.translate(X, Y); ctx.rotate(p.rot); ctx.fillStyle = '#f2c14e'; const s = Math.max(2, cam.ppm * 1.2); ctx.fillRect(-s / 2, -s / 3, s, s * 0.66); ctx.restore(); }
+  }
+  ctx.globalAlpha = 1;
+  if (L && L.alive) drawLander();
+}
+function gauge(label, value, unit, x, y, w, col) {
+  ctx.fillStyle = '#0a0d11'; ctx.fillRect(x, y, w, 40);
+  ctx.strokeStyle = '#2a313b'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 39);
+  txt(label, x + 6, y + 13, '500 8px "Red Hat Mono", monospace', '#7c8794', 'left', '1.2px');
+  txt(value, x + w - 6, y + 33, '700 16px "Red Hat Mono", monospace', col, 'right');
+  if (unit) txt(unit, x + 6, y + 33, '500 9px "Red Hat Mono", monospace', '#7c8794');
+}
+function drawHUD() {
+  ctx.fillStyle = '#0c0e12'; ctx.fillRect(0, 0, W, TOPH);
+  const alt = Math.max(0, L.y - 3.6 - groundAt(L.x));
+  const vy = -L.vy, vx = L.vx, ang = Math.round(L.a * 180 / Math.PI);
+  const okV = vy <= 3.5, okH = Math.abs(vx) <= 2.2, okA = Math.abs(ang) <= 12;
+  const gw = (W - 10 - 4 * 4) / 5;
+  gauge('İRTİFA', fmt(alt), 'm', 5, 7, gw, '#7dff9b');
+  gauge('DİKEY', f1(vy), vy >= 0 ? '↓' : '↑', 5 + (gw + 4), 7, gw, alt < 80 && !okV ? '#ff5a4a' : '#7dff9b');
+  gauge('YATAY', f1(Math.abs(vx)), vx >= 0 ? '→' : '←', 5 + (gw + 4) * 2, 7, gw, alt < 80 && !okH ? '#ff5a4a' : '#7dff9b');
+  gauge('EĞİM', ang + '°', '', 5 + (gw + 4) * 3, 7, gw, alt < 80 && !okA ? '#ff5a4a' : '#7dff9b');
+  gauge('YAKIT', fmt(fuel), '', 5 + (gw + 4) * 4, 7, gw, fuel < 150 ? (Math.floor(clock * 4) % 2 ? '#ff5a4a' : '#ffb63a') : '#ffb63a');
+  // mission line
+  const tag = (round ? 'TUR ' + (round + 1) + ' · ' : '') + M.body.toLocaleUpperCase('tr-TR') + ' · ' + M.site.toLocaleUpperCase('tr-TR');
+  txt(tag, 8, TOPH + 16, '700 10px "Red Hat Mono", monospace', '#c9d1db', 'left', '1.2px');
+  txt('SKOR ' + fmt(score), W - 44, TOPH + 16, '700 10px "Red Hat Mono", monospace', '#ffb63a', 'right', '1px');
+  for (let i = 0; i < 3; i++) { ctx.fillStyle = i < landers ? '#f2c14e' : '#2a313b'; ctx.fillRect(8 + i * 10, TOPH + 22, 7, 5); }
+  if (M.wind) { const w = windNow; txt('RÜZGÂR ' + (w >= 0 ? '→ ' : '← ') + f1(Math.abs(w)), W - 44, TOPH + 30, '500 9px "Red Hat Mono", monospace', '#7c8794', 'right', '1px'); }
+  // guidance: nearest pad indicator
+  if (L.alive && !L.landed) {
+    let bestP = null, bd = 1e9; for (const p of T.pads) { const d = Math.abs((p.x0 + p.x1) / 2 - L.x); if (d < bd) { bd = d; bestP = p; } }
+    const cx = sx((bestP.x0 + bestP.x1) / 2);
+    if (cx < 0 || cx > W) { const left = cx < 0; ctx.fillStyle = '#7dff9b'; const y = sy(bestP.y) ; const yy = clamp(y, TOPH + 30, GH - 20); ctx.beginPath(); if (left) { ctx.moveTo(6, yy); ctx.lineTo(16, yy - 7); ctx.lineTo(16, yy + 7); } else { ctx.moveTo(W - 6, yy); ctx.lineTo(W - 16, yy - 7); ctx.lineTo(W - 16, yy + 7); } ctx.closePath(); ctx.fill(); txt('×' + bestP.mult + ' ' + fmt(bd) + ' m', left ? 20 : W - 20, yy + 4, '700 10px "Red Hat Mono", monospace', '#7dff9b', left ? 'left' : 'right'); }
+  }
+  if (outcome && !outcome.ok && endT > 0) txt(outcome.reason, W / 2, TOPH + (GH - TOPH) * 0.35, '700 13px "Red Hat Mono", monospace', '#ff5a4a', 'center');
+  if (outcome && outcome.ok && endT > 0) txt('KARTAL KONDU', W / 2, TOPH + (GH - TOPH) * 0.35, '400 20px "Archivo Black", sans-serif', '#7dff9b', 'center', '2px');
+}
+function render(dt) {
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
+  if (L) updCam(dt);
+  ctx.save(); ctx.beginPath(); ctx.rect(0, TOPH, W, GH - TOPH); ctx.clip();
+  if (T && L) drawWorld(); else { ctx.fillStyle = '#05070b'; ctx.fillRect(0, 0, W, GH); }
+  ctx.restore();
+  if (L && state !== 'menu') drawHUD();
+  else { ctx.fillStyle = '#0c0e12'; ctx.fillRect(0, 0, W, TOPH); }
+}
+
+/* ---------- input ---------- */
+function bindHold(id, key) {
+  const el = $(id);
+  el.addEventListener('pointerdown', e => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (_) {} el.classList.add('on'); input[key] = true; });
+  const up = () => { el.classList.remove('on'); input[key] = false; };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up); el.addEventListener('lostpointercapture', up);
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+bindHold('leftBtn', 'left'); bindHold('rightBtn', 'right'); bindHold('thrustBtn', 'thrust');
+const KEYS = { arrowleft: 'left', a: 'left', arrowright: 'right', d: 'right', arrowup: 'thrust', w: 'thrust', ' ': 'thrust' };
+const KB = { left: 'leftBtn', right: 'rightBtn', thrust: 'thrustBtn' };
+window.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (state === 'pause' && (k === 'p' || k === 'escape')) { resumeGame(); return; }
+  if (state !== 'play') return;
+  if (k === 'p' || k === 'escape') { pauseGame(); return; }
+  const m = KEYS[k]; if (!m) return; e.preventDefault(); input[m] = true; $(KB[m]).classList.add('on');
+});
+window.addEventListener('keyup', e => { const m = KEYS[e.key.toLowerCase()]; if (m) { input[m] = false; $(KB[m]).classList.remove('on'); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
+
+/* ---------- flow ---------- */
+const ui = { menu: $('menu'), report: $('report'), pause: $('pause'), over: $('over') };
+function showOnly(id) { for (const k in ui) ui[k].hidden = k !== id; }
+function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { $(id).setAttribute('aria-pressed', String(!muted)); $(id).textContent = muted ? 'Ses kapalı' : 'Ses'; } }
+function clearInput() { for (const k in input) input[k] = false; document.querySelectorAll('.k.on').forEach(b => b.classList.remove('on')); engineSound(false); }
+function fillList(el, rows) {
+  el.innerHTML = '';
+  for (const [k, v, cls] of rows) { const dt = document.createElement('dt'); dt.textContent = k; const dd = document.createElement('dd'); dd.textContent = v; if (cls) dd.className = cls; el.append(dt, dd); }
+}
+function renderMissions() { return;
+  const ol = $('missionList'); ol.innerHTML = '';
+  MISSIONS.forEach((m, i) => {
+    const li = document.createElement('li');
+    const a = document.createElement('span'); a.textContent = String(i + 1);
+    const b = document.createElement('span'); const bb = document.createElement('b'); bb.textContent = m.body; b.append(bb, document.createTextNode(' · ' + m.site));
+    const c = document.createElement('em'); c.textContent = 'g ' + String(m.g).replace('.', ',') + (m.drag ? (m.drag > 0.05 ? ' · yoğun hava' : ' · ince hava') : '') + (m.wind ? ' · rüzgâr' : '');
+    li.append(a, b, c); ol.appendChild(li);
+  });
+}
+let missionIndex = 0;
+function startProgram() { audioInit(); score = 0; fuel = 1500; landers = 3; landings = 0; missionIndex = 0; startMission(); }
+function startMission() { loadMission(missionIndex); state = 'play'; clock = 0; clearInput(); showOnly(null); $('pauseBtn').hidden = false; }
+function afterTouchdown() {
+  clearInput();
+  if (outcome.ok) {
+    state = 'report'; $('pauseBtn').hidden = true;
+    $('repTag').textContent = 'Görev ' + (missionIndex + 1) + ' · ' + M.body;
+    $('t-rep').textContent = outcome.vy < 1 ? 'Tüy gibi kondu' : outcome.vy < 2 ? 'Kartal kondu' : 'Sert ama sağlam';
+    fillList($('repList'), [
+      ['Temas hızı', f1(outcome.vy) + ' m/s', 'ok'], ['Yatay kayma', f1(outcome.vx) + ' m/s', 'ok'],
+      ['Pist çarpanı', '×' + outcome.pad.mult], ['İniş puanı', '+' + fmt(outcome.base)],
+      ['Yumuşaklık', '+' + fmt(outcome.softPts)], ['Merkeze yakınlık', '+' + fmt(outcome.centerPts)],
+      ['Yakıt ikmali', '+' + fmt(outcome.fuelBack), 'ok']
+    ]);
+    $('repScore').textContent = fmt(score);
+    showOnly('report'); $('nextBtn').focus({ preventScroll: true });
+  } else if (landers > 0 && fuel > 0) {
+    startMission();
+  } else gameOver(fuel <= 0 ? 'Yakıt bitti' : 'Araç kalmadı');
+}
+function pauseGame() { if (state !== 'play') return; state = 'pause'; clearInput(); showOnly('pause'); $('pauseBtn').hidden = true; }
+function resumeGame() { if (state !== 'pause') return; state = 'play'; showOnly(null); $('pauseBtn').hidden = false; last = performance.now(); }
+function gameOver(why) {
+  state = 'over'; clearInput(); $('pauseBtn').hidden = true;
+  const isNew = score > best; if (isNew) { best = score; try { localStorage.setItem('inis_best', String(best)); } catch (e) {} }
+  $('overTag').textContent = why;
+  $('fScore').textContent = fmt(score); $('newBest').hidden = !isNew;
+  fillList($('overList'), [['Başarılı iniş', String(landings)], ['Son görev', M.body + ' · ' + M.site], ['Kalan yakıt', fmt(fuel)]]);
+  $('bestOut').textContent = fmt(best);
+  showOnly('over');
+}
+function toMenu() {
+  state = 'menu'; clearInput(); loadMission(0); L.y = groundAt(L.x) + 120; L.vx = 0; L.a = 0;
+  renderMissions(); showOnly('menu'); $('pauseBtn').hidden = true; $('bestOut').textContent = fmt(best);
+}
+$('startBtn').addEventListener('click', startProgram);
+$('againBtn').addEventListener('click', startProgram);
+$('homeBtn').addEventListener('click', toMenu);
+$('nextBtn').addEventListener('click', () => { missionIndex++; startMission(); });
+$('quitBtn').addEventListener('click', () => { state = 'play'; gameOver('Görev iptal edildi'); });
+$('resumeBtn').addEventListener('click', resumeGame);
+$('pauseBtn').addEventListener('click', pauseGame);
+for (const id of ['muteBtn', 'muteBtn2']) $(id).addEventListener('click', () => { muted = !muted; try { localStorage.setItem('inis_mute', muted ? '1' : '0'); } catch (e) {} setMuteUI(); if (muted) engineSound(false); else { audioInit(); sfx('tick'); } });
+
+/* ---------- loop ---------- */
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.033, Math.max(0, (now - last) / 1000)); last = now;
+  if (state === 'play') update(dt);
+  else if (state === 'menu') { clock += dt; L.y = groundAt(L.x) + 90 + Math.sin(clock * 0.6) * 10; L.x += 6 * dt; L.thrusting = Math.sin(clock * 2) > 0.2; if (L.thrusting && Math.random() < 0.7) { const [fx, fy] = localToWorld(0, -4.6); parts.push({ k: 'flame', x: fx, y: fy, vx: rand(-2, 2), vy: -rand(14, 24), life: 0.4, max: 0.45 }); } tickParts(dt); }
+  else tickParts(dt);
+  render(dt);
+  requestAnimationFrame(frame);
+}
+window.addEventListener('resize', resize);
+makeStars();
+resize();
+toMenu();
+setMuteUI();
+requestAnimationFrame(frame);
+})();
+</script>
+<script>
+(() => {
+  const g = document.getElementById('guide'), m = document.getElementById('menu');
+  document.getElementById('guideBtn').addEventListener('click', () => { m.hidden = true; g.hidden = false; g.scrollTop = 0; });
+  document.getElementById('guideClose').addEventListener('click', () => { g.hidden = true; m.hidden = false; });
+})();
+</script>
+</body>
+</html>
