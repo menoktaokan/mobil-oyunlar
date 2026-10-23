@@ -20,7 +20,7 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 
 ## Oynamak
 
-- **Çevrimiçi:** GitHub Pages açıkken `https://fundasarikaya.github.io/mobil-oyunlar/` adresinden oyun seçilir.
+- **Çevrimiçi:** GitHub Pages açıkken `https://menoktaokan.github.io/mobil-oyunlar/` adresinden oyun seçilir.
 - **Yerelde:** Herhangi bir oyunun `index.html` dosyasını tarayıcıda açmak yeterli.
 
 Sazlık Avı dışındaki oyunların menüsünde **Kılavuz** bölümü nasıl oynandığını anlatır; Sazlık Avı kuralları başlangıç ekranında yazar.
