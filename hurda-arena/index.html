@@ -106,8 +106,12 @@ h2{font-size:46px}
       </div>
       <div class="row">
         <button class="opt" id="aimBtn" aria-pressed="true" style="flex:1">Otomatik nişan<span class="st"></span></button>
+        <button class="opt" id="mapBtn" aria-pressed="true" style="flex:1">Mini harita<span class="st"></span></button>
+      </div>
+      <div class="row">
         <button class="opt" id="muteBtn" aria-pressed="true" style="flex:1">Ses<span class="st"></span></button>
         <button class="opt" id="guideBtn">Kılavuz</button>
+        <button type="button" class="opt" data-hub hidden>Oyunlar</button>
       </div>
       <div class="best">En iyi vardiya <output id="bestOut">0</output></div>
     </section>
@@ -123,7 +127,7 @@ h2{font-size:46px}
         <li><b>Mermi savuşturma</b>Sana gelen düşman mermilerini kendi mermilerinle vurursan patlar, etkisiz kalır.</li>
         <li><b>Sandıklar</b>Haritada beliren sandıklar 2 saniyelik güç verir: halka atış, seri atış ya da şok alanı.</li>
         <li><b>Bombardıman</b>Bir yerde uzun süre durursan çevrene bomba yağar. Kırmızı halkalar düşecekleri yeri gösterir.</li>
-        <li><b>Harita</b>Sol alttaki küçük harita bütün arenayı gösterir.</li>
+        <li><b>Harita</b>Sol üstteki küçük harita bütün arenayı gösterir; ayarlardan kapatılabilir.</li>
         <li><b>Duraklat</b>Duraklatınca taktığın modüller ve seviyeleri görünür.</li>
         <li><b>Atıl</b>Sağ alttaki tuş seni kısa süre dokunulmaz olarak ileri fırlatır. Tuşun içi dolunca yeniden kullanılabilir.</li>
         <li><b>Robotlar</b>Tarayıcı hızlıdır, Nişancı uzaktan ateş eder, Fünye yaklaşınca patlar, Bölünen üçe ayrılır, Ezici dayanıklıdır. Mayın önce durur, sonra sana kilitlenip hızla atılır; yolundan çekil. Her beşinci dalgada Pres gelir; kırmızı çizgiyle nişan alıp kasaların içinden geçen bir lazer atar, çizgiden çekil.</li>
@@ -147,9 +151,13 @@ h2{font-size:46px}
       <div class="row"><button class="go" id="resumeBtn">DEVAM</button></div>
       <div class="row">
         <button class="opt" id="aimBtn2" aria-pressed="true" style="flex:1">Otomatik nişan<span class="st"></span></button>
+        <button class="opt" id="mapBtn2" aria-pressed="true" style="flex:1">Mini harita<span class="st"></span></button>
+      </div>
+      <div class="row">
         <button class="opt" id="muteBtn2" aria-pressed="true" style="flex:1">Ses<span class="st"></span></button>
       </div>
       <button class="opt" id="quitBtn">Vardiyayı bırak</button>
+        <button type="button" class="opt" data-hub hidden>Oyunlar</button>
     </section>
 
     <section id="over" class="sheet" hidden aria-labelledby="t-over">
@@ -167,6 +175,7 @@ h2{font-size:46px}
       <div class="row">
         <button class="go" id="againBtn">TEKRAR</button>
         <button class="opt" id="homeBtn">Menü</button>
+        <button type="button" class="opt" data-hub hidden>Oyunlar</button>
       </div>
     </section>
   </div>
@@ -251,10 +260,11 @@ function sfx(n) {
 }
 
 /* ---------- storage ---------- */
-let best = 0, autoAim = true;
+let best = 0, autoAim = true, showMap = true;
 try { best = parseInt(localStorage.getItem('hurda_best') || '0', 10) || 0; } catch (e) {}
 try { muted = localStorage.getItem('hurda_mute') === '1'; } catch (e) {}
 try { const a = localStorage.getItem('hurda_auto'); if (a !== null) autoAim = a === '1'; } catch (e) {}
+try { const m = localStorage.getItem('hurda_map'); if (m !== null) showMap = m === '1'; } catch (e) {}
 
 /* ---------- upgrades ---------- */
 const UPG = [
@@ -1132,7 +1142,7 @@ function drawHUD() {
     ctx.fillStyle = 'rgba(255,59,59,0.2)'; ctx.fillRect(12, y + 66, bw, 5);
     ctx.fillStyle = C.alarm; ctx.fillRect(12, y + 66, bw * Math.max(0, boss.hp / boss.maxhp), 5);
   }
-  drawMinimap(H - AH * (56 / AW) - 24);
+  if (showMap) drawMinimap(boss ? y + 80 : y + 52);
 }
 function drawBanner() {
   if (!banner) return;
@@ -1328,6 +1338,7 @@ function setPlayUI(on) { ui.pauseBtn.hidden = !on; ui.dashBtn.hidden = !on; }
 function setToggles() {
   for (const id of ['muteBtn', 'muteBtn2']) $(id).setAttribute('aria-pressed', String(!muted));
   for (const id of ['aimBtn', 'aimBtn2']) $(id).setAttribute('aria-pressed', String(autoAim));
+  for (const id of ['mapBtn', 'mapBtn2']) $(id).setAttribute('aria-pressed', String(showMap));
 }
 function startRun() {
   audioInit(); resetRun(); state = 'play'; clock = 0;
@@ -1410,6 +1421,7 @@ ui.pauseBtn.addEventListener('click', pauseGame);
 ui.dashBtn.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); dash(); });
 ui.dashBtn.addEventListener('click', e => { if (e.detail === 0) dash(); });
 for (const id of ['muteBtn', 'muteBtn2']) $(id).addEventListener('click', () => { muted = !muted; try { localStorage.setItem('hurda_mute', muted ? '1' : '0'); } catch (e) {} setToggles(); if (!muted) { audioInit(); sfx('pick'); } });
+for (const id of ['mapBtn', 'mapBtn2']) $(id).addEventListener('click', () => { showMap = !showMap; try { localStorage.setItem('hurda_map', showMap ? '1' : '0'); } catch (e) {} setToggles(); });
 for (const id of ['aimBtn', 'aimBtn2']) $(id).addEventListener('click', () => { autoAim = !autoAim; try { localStorage.setItem('hurda_auto', autoAim ? '1' : '0'); } catch (e) {} setToggles(); });
 
 /* ---------- loop ---------- */
@@ -1453,6 +1465,20 @@ requestAnimationFrame(frame);
   const g = document.getElementById('guide'), m = document.getElementById('menu');
   document.getElementById('guideBtn').addEventListener('click', () => { m.hidden = true; g.hidden = false; g.scrollTop = 0; });
   document.getElementById('guideClose').addEventListener('click', () => { g.hidden = true; m.hidden = false; });
+})();
+</script>
+<script>
+(() => {
+  // "Oyunlar" button: only when the game is opened as its own page (e.g. GitHub Pages), never inside an embed
+  let framed = true; try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+  const url = location.protocol === 'file:' ? '../index.html' : '../';
+  for (const b of document.querySelectorAll('[data-hub]')) {
+    b.hidden = false; b.addEventListener('click', () => { location.href = url; });
+    // if the start button shares this row, give it a line of its own so nothing gets squeezed
+    const row = b.parentElement, go = row && row.querySelector('#startBtn');
+    if (go) { row.style.flexWrap = 'wrap'; go.style.flex = '1 1 100%'; for (const c of row.children) if (c !== go && !c.hidden) c.style.flex = '1 1 0'; }
+  }
 })();
 </script>
 </body>

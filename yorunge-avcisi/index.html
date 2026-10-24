@@ -93,6 +93,7 @@ h2{font-size:30px;line-height:1;letter-spacing:.02em}
         <button id="startBtn" class="cta">Kalkış</button>
         <button id="muteBtn" class="ghost" aria-pressed="true">Ses</button>
         <button class="ghost" id="guideBtn">Kılavuz</button>
+        <button type="button" class="ghost" data-hub hidden>Oyunlar</button>
       </div>
       <div class="best">En yüksek skor <output id="bestOut">0</output></div>
     </section>
@@ -120,6 +121,7 @@ h2{font-size:30px;line-height:1;letter-spacing:.02em}
         <button id="muteBtn2" class="ghost" aria-pressed="true">Ses</button>
       </div>
       <button id="quitBtn" class="ghost">Ana menüye dön</button>
+        <button type="button" class="ghost" data-hub hidden>Oyunlar</button>
     </section>
 
     <section id="over" class="ov" hidden aria-labelledby="t3">
@@ -136,6 +138,7 @@ h2{font-size:30px;line-height:1;letter-spacing:.02em}
       <div class="row">
         <button id="againBtn" class="cta">Tekrar uç</button>
         <button id="homeBtn" class="ghost">Menü</button>
+        <button type="button" class="ghost" data-hub hidden>Oyunlar</button>
       </div>
     </section>
   </div>
@@ -1207,6 +1210,20 @@ requestAnimationFrame(frame);
   const g = document.getElementById('guide'), m = document.getElementById('menu');
   document.getElementById('guideBtn').addEventListener('click', () => { m.hidden = true; g.hidden = false; g.scrollTop = 0; });
   document.getElementById('guideClose').addEventListener('click', () => { g.hidden = true; m.hidden = false; });
+})();
+</script>
+<script>
+(() => {
+  // "Oyunlar" button: only when the game is opened as its own page (e.g. GitHub Pages), never inside an embed
+  let framed = true; try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+  const url = location.protocol === 'file:' ? '../index.html' : '../';
+  for (const b of document.querySelectorAll('[data-hub]')) {
+    b.hidden = false; b.addEventListener('click', () => { location.href = url; });
+    // if the start button shares this row, give it a line of its own so nothing gets squeezed
+    const row = b.parentElement, go = row && row.querySelector('#startBtn');
+    if (go) { row.style.flexWrap = 'wrap'; go.style.flex = '1 1 100%'; for (const c of row.children) if (c !== go && !c.hidden) c.style.flex = '1 1 0'; }
+  }
 })();
 </script>
 </body>

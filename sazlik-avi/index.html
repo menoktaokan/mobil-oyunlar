@@ -45,6 +45,7 @@ button:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
       <h1>SAZLIK<br>AVI</h1>
       <p>Uçan kuşlara dokun. Her kuş için 3 fişeğin var, artan fişek puan getirir. Turu geçmek için 5 kuştan 4'ünü vur. Üst üste 3 kuş kaçarsa oyun biter.</p>
       <button id="go" type="button">BAŞLA</button>
+      <button id="hub" type="button" data-hub hidden style="font-size:9px;padding:10px 14px;background:transparent;color:var(--ink);box-shadow:0 0 0 2px var(--ink) inset">OYUNLAR</button>
     </div>
   </div>
   <div id="hud">
@@ -220,6 +221,14 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 renderHud();requestAnimationFrame(loop);
+})();
+</script>
+<script>
+(() => {
+  let framed = true; try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+  const url = location.protocol === 'file:' ? '../index.html' : '../';
+  for (const b of document.querySelectorAll('[data-hub]')) { b.hidden = false; b.addEventListener('click', () => { location.href = url; }); }
 })();
 </script>
 

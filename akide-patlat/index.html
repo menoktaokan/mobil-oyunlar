@@ -81,6 +81,7 @@ h2{font-size:32px}
         <button class="alt" id="contBtn" hidden>Kavanoz 2</button>
         <button class="alt" id="muteBtn" aria-pressed="true">Ses</button>
         <button class="alt" id="guideBtn">Kılavuz</button>
+        <button type="button" class="alt" data-hub hidden>Oyunlar</button>
       </div>
     </section>
 
@@ -108,6 +109,7 @@ h2{font-size:32px}
       <div class="row">
         <button class="alt" id="restartBtn" style="flex:1">Baştan başla</button>
         <button class="alt" id="quitBtn" style="flex:1">Menü</button>
+        <button type="button" class="alt" style="flex:1" data-hub hidden>Oyunlar</button>
       </div>
     </section>
 
@@ -125,6 +127,7 @@ h2{font-size:32px}
         <button class="go" id="nextBtn">Sonraki kavanoz</button>
       </div>
       <button class="alt" id="resMenu">Menü</button>
+        <button type="button" class="alt" data-hub hidden>Oyunlar</button>
     </section>
   </div>
 </div>
@@ -647,6 +650,20 @@ requestAnimationFrame(frame);
   const g = document.getElementById('guide'), m = document.getElementById('menu');
   document.getElementById('guideBtn').addEventListener('click', () => { m.hidden = true; g.hidden = false; g.scrollTop = 0; });
   document.getElementById('guideClose').addEventListener('click', () => { g.hidden = true; m.hidden = false; });
+})();
+</script>
+<script>
+(() => {
+  // "Oyunlar" button: only when the game is opened as its own page (e.g. GitHub Pages), never inside an embed
+  let framed = true; try { framed = window.self !== window.top; } catch (e) {}
+  if (framed) return;
+  const url = location.protocol === 'file:' ? '../index.html' : '../';
+  for (const b of document.querySelectorAll('[data-hub]')) {
+    b.hidden = false; b.addEventListener('click', () => { location.href = url; });
+    // if the start button shares this row, give it a line of its own so nothing gets squeezed
+    const row = b.parentElement, go = row && row.querySelector('#startBtn');
+    if (go) { row.style.flexWrap = 'wrap'; go.style.flex = '1 1 100%'; for (const c of row.children) if (c !== go && !c.hidden) c.style.flex = '1 1 0'; }
+  }
 })();
 </script>
 </body>
