@@ -85,6 +85,7 @@ h2{font-size:38px}
 .guide-list b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
 #guide{z-index:9}
 [hidden]{display:none!important}
+#muteBtn[aria-pressed="false"],#muteBtn2[aria-pressed="false"]{text-decoration:line-through;text-decoration-thickness:2px}
 </style>
 </head>
 <body>
@@ -826,7 +827,7 @@ function showOnly(id) { for (const k of ['menu', 'final', 'pause']) ui[k].hidden
 function setScope(v) { scoped = v; $('scopeBtn').setAttribute('aria-pressed', String(v)); }
 function setHold(v) { holding = v; $('breathBtn').classList.toggle('held', v); }
 function updateButtons() { $('fireBtn').disabled = !(state === 'play' && reloadT <= 0 && ammo > 0 && boltT <= 0); }
-function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { const b = $(id); b.setAttribute('aria-pressed', String(!muted)); b.textContent = muted ? 'Ses kapalı' : 'Ses'; } }
+function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { const b = $(id); b.setAttribute('aria-pressed', String(!muted)); b.textContent = 'Ses'; } }
 function toggleMute() { muted = !muted; try { localStorage.setItem('menzil600_mute', muted ? '1' : '0'); } catch (e) {} setMuteUI(); if (!muted) { audioInit(); sfx('ding'); } }
 
 function renderBoard(el, hi) {

@@ -56,6 +56,7 @@ h2{font-size:26px}
 .guide-list b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
 #guide{z-index:9}
 [hidden]{display:none!important}
+#muteBtn[aria-pressed="false"],#muteBtn2[aria-pressed="false"]{text-decoration:line-through;text-decoration-thickness:2px}
 </style>
 </head>
 <body>
@@ -515,7 +516,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && sta
 /* ---------- flow ---------- */
 const ui = { menu: $('menu'), pause: $('pause'), over: $('over') };
 function showOnly(id) { for (const k in ui) ui[k].hidden = k !== id; }
-function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { $(id).setAttribute('aria-pressed', String(!muted)); $(id).textContent = muted ? 'Ses kapalı' : 'Ses'; } }
+function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { $(id).setAttribute('aria-pressed', String(!muted)); $(id).textContent = 'Ses'; } }
 function clearInput() { for (const k in input) input[k] = false; stick.id = null; stick.kx = stick.ky = stick.m = 0; fireTouch.id = null; thrustSound(false); }
 function startGame() { audioInit(); reset(); state = 'play'; clock = 0; showOnly(null); $('pauseBtn').hidden = false; }
 function pauseGame() { if (state !== 'play') return; state = 'pause'; clearInput(); showOnly('pause'); $('pauseBtn').hidden = true; }

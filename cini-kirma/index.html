@@ -68,6 +68,7 @@ h2{font-size:32px}
 .guide-list b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
 #guide{z-index:9}
 [hidden]{display:none!important}
+#muteBtn[aria-pressed="false"],#muteBtn2[aria-pressed="false"]{text-decoration:line-through;text-decoration-thickness:2px}
 </style>
 </head>
 <body>
@@ -685,7 +686,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && sta
 const ui = { menu: $('menu'), pause: $('pause'), over: $('over') };
 function showOnly(id) { for (const k in ui) ui[k].hidden = k !== id; }
 function updateLaunchBtn() { $('launchBtn').hidden = !(state === 'play' && balls.some(b => b.held)); }
-function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { $(id).setAttribute('aria-pressed', String(!muted)); $(id).textContent = muted ? 'Ses kapalı' : 'Ses'; } }
+function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { $(id).setAttribute('aria-pressed', String(!muted)); $(id).textContent = 'Ses'; } }
 function renderLevels() {
   const c = $('contBtn');
   c.hidden = unlocked < 1;

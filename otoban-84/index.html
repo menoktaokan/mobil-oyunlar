@@ -57,6 +57,7 @@ h2{margin:0;font-size:24px;font-weight:800;line-height:1.05;letter-spacing:.02em
 .guide-list b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
 #guide{z-index:9}
 [hidden]{display:none!important}
+#muteBtn[aria-pressed="false"],#muteBtn2[aria-pressed="false"]{text-decoration:line-through;text-decoration-thickness:2px}
 </style>
 </head>
 <body>
@@ -703,7 +704,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && sta
 /* ---------- flow ---------- */
 const ui = { menu: $('menu'), pause: $('pause'), over: $('over') };
 function showOnly(id) { for (const k in ui) ui[k].hidden = k !== id; }
-function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { $(id).setAttribute('aria-pressed', String(!muted)); $(id).textContent = muted ? 'Ses kapalı' : 'Ses'; } }
+function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { $(id).setAttribute('aria-pressed', String(!muted)); $(id).textContent = 'Ses'; } }
 function startGame() {
   audioInit(); reset(); state = 'play'; clock = 0;
   showOnly(null); $('pauseBtn').hidden = false;

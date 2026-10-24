@@ -78,6 +78,7 @@ h3{font-size:22px}
 .guide-list b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
 #guide{z-index:9}
 [hidden]{display:none!important}
+#muteBtn[aria-pressed="false"],#muteBtn2[aria-pressed="false"]{text-decoration:line-through;text-decoration-thickness:2px}
 </style>
 </head>
 <body>
@@ -907,7 +908,7 @@ function demoMenu() {
   ens = [];
   ['kalyon', 'sandal', 'surat', 'sandal', 'zirhli'].forEach((t, i) => { spawn(t); ens[i].s = 80 + i * 60; });
 }
-function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { $(id).setAttribute('aria-pressed', String(!muted)); $(id).textContent = muted ? 'Ses kapalı' : 'Ses'; } }
+function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { $(id).setAttribute('aria-pressed', String(!muted)); $(id).textContent = 'Ses'; } }
 
 $('startBtn').addEventListener('click', startGame);
 $('againBtn').addEventListener('click', startGame);

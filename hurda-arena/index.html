@@ -54,6 +54,7 @@ h2{font-size:46px}
 .opt[aria-pressed="false"]{color:var(--muted);border-color:rgba(236,234,228,.14)}
 .opt[aria-pressed="false"] .st::after{content:" kapalı"}
 .opt[aria-pressed="true"] .st::after{content:" açık"}
+#muteBtn[aria-pressed="false"],#muteBtn2[aria-pressed="false"]{text-decoration:line-through;text-decoration-thickness:2px}
 .best{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);border-top:1px solid rgba(236,234,228,.12);padding-top:10px}
 .best output{font-size:15px;letter-spacing:0;color:var(--hazard)}
 
@@ -109,7 +110,7 @@ h2{font-size:46px}
         <button class="opt" id="mapBtn" aria-pressed="true" style="flex:1">Mini harita<span class="st"></span></button>
       </div>
       <div class="row">
-        <button class="opt" id="muteBtn" aria-pressed="true" style="flex:1">Ses<span class="st"></span></button>
+        <button class="opt" id="muteBtn" aria-pressed="true" style="flex:1">Ses</button>
         <button class="opt" id="guideBtn">Kılavuz</button>
         <button type="button" class="opt" data-hub hidden>Oyunlar</button>
       </div>
@@ -125,7 +126,7 @@ h2{font-size:46px}
         <li><b>Arena</b>Kasalar ve hurda yığınları her dalgadan sonra yeniden dizilir.</li>
         <li><b>Hedef seç</b>Bir robota kısaca dokun, otomatik nişan önce onu vurur. Aynı robota tekrar dokununca seçim kalkar.</li>
         <li><b>Mermi savuşturma</b>Sana gelen düşman mermilerini kendi mermilerinle vurursan patlar, etkisiz kalır.</li>
-        <li><b>Sandıklar</b>Haritada beliren sandıklar 2 saniyelik güç verir: halka atış, seri atış ya da şok alanı.</li>
+        <li><b>Sandıklar</b>Haritada beliren sandıklar 4 saniyelik güç verir; kalan süre altta görünür: halka atış, seri atış ya da şok alanı.</li>
         <li><b>Bombardıman</b>Bir yerde uzun süre durursan çevrene bomba yağar. Kırmızı halkalar düşecekleri yeri gösterir.</li>
         <li><b>Harita</b>Sol üstteki küçük harita bütün arenayı gösterir; ayarlardan kapatılabilir.</li>
         <li><b>Duraklat</b>Duraklatınca taktığın modüller ve seviyeleri görünür.</li>
@@ -154,7 +155,7 @@ h2{font-size:46px}
         <button class="opt" id="mapBtn2" aria-pressed="true" style="flex:1">Mini harita<span class="st"></span></button>
       </div>
       <div class="row">
-        <button class="opt" id="muteBtn2" aria-pressed="true" style="flex:1">Ses<span class="st"></span></button>
+        <button class="opt" id="muteBtn2" aria-pressed="true" style="flex:1">Ses</button>
       </div>
       <button class="opt" id="quitBtn">Vardiyayı bırak</button>
         <button type="button" class="opt" data-hub hidden>Oyunlar</button>
@@ -887,7 +888,7 @@ function updHazards(dt) {
   }
   for (const q of powers) {
     q.t += dt;
-    if (P.alive && Math.hypot(q.x - P.x, q.y - P.y) < 20) { q.dead = true; P.pow = { type: q.type, t: 2, max: 2 }; P.ringT = 0; sfx('power'); parts.push({ k: 'ring', x: P.x, y: P.y, life: 0.4, max: 0.4, size: 8, grow: 50, col: POW[q.type].col }); }
+    if (P.alive && Math.hypot(q.x - P.x, q.y - P.y) < 20) { q.dead = true; P.pow = { type: q.type, t: 4, max: 4 }; P.ringT = 0; sfx('power'); parts.push({ k: 'ring', x: P.x, y: P.y, life: 0.4, max: 0.4, size: 8, grow: 50, col: POW[q.type].col }); }
     if (q.t > q.life) q.dead = true;
   }
   powers = powers.filter(q => !q.dead);
@@ -1088,6 +1089,27 @@ function drawStick(s, col) {
   ctx.globalAlpha = 0.85; ctx.beginPath(); ctx.arc(s.ox + s.kx * 46, s.oy + s.ky * 46, 18, 0, TAU); ctx.fill();
   ctx.restore();
 }
+function powGlyph(type, col) {
+  ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.8;
+  if (type === 'ring') { ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.stroke(); for (let i = 0; i < 6; i++) { const a = i * TAU / 6; ctx.fillRect(Math.cos(a) * 8 - 1, Math.sin(a) * 8 - 1, 2, 2); } }
+  else if (type === 'hyper') { for (const o of [-4, 0, 4]) { ctx.beginPath(); ctx.moveTo(o - 2, -5); ctx.lineTo(o + 2, 0); ctx.lineTo(o - 2, 5); ctx.stroke(); } }
+  else { ctx.beginPath(); ctx.moveTo(2, -7); ctx.lineTo(-3, 1); ctx.lineTo(1, 1); ctx.lineTo(-2, 7); ctx.lineTo(4, -1); ctx.lineTo(0, -1); ctx.closePath(); ctx.fill(); }
+}
+// active power-up: icon plus a draining bar, bottom centre
+function drawPowMeter() {
+  if (!P || !P.alive || !P.pow) return;
+  const col = POW[P.pow.type].col, f = clamp(P.pow.t / P.pow.max, 0, 1);
+  const w = 132, h = 26, x = (W - w) / 2, y = H - h - 30;
+  ctx.save();
+  ctx.fillStyle = 'rgba(20,21,23,0.75)'; ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = col; ctx.globalAlpha = 0.6; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1); ctx.globalAlpha = 1;
+  ctx.translate(x + 15, y + h / 2); powGlyph(P.pow.type, col); ctx.translate(-(x + 15), -(y + h / 2));
+  const bx = x + 32, bw = w - 42, by = y + h / 2 - 3;
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(bx, by, bw, 6);
+  const blink = f < 0.25 && Math.floor(clock * 8) % 2 === 0;
+  ctx.fillStyle = col; ctx.globalAlpha = blink ? 0.45 : 1; ctx.fillRect(bx, by, bw * f, 6);
+  ctx.restore();
+}
 function drawMinimap(my) {
   const mw = 56, k = mw / AW, mh = AH * k, mx = 12;
   ctx.save();
@@ -1143,6 +1165,7 @@ function drawHUD() {
     ctx.fillStyle = C.alarm; ctx.fillRect(12, y + 66, bw * Math.max(0, boss.hp / boss.maxhp), 5);
   }
   if (showMap) drawMinimap(boss ? y + 80 : y + 52);
+  drawPowMeter();
 }
 function drawBanner() {
   if (!banner) return;
@@ -1193,10 +1216,7 @@ function render() {
     ctx.save(); ctx.translate(q.x, q.y + bob);
     ctx.globalAlpha = 0.25 + 0.15 * Math.sin(q.t * 6); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, 17, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
     ctx.rotate(Math.PI / 4); ctx.fillStyle = '#1b1d1f'; ctx.fillRect(-9, -9, 18, 18); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.strokeRect(-9, -9, 18, 18); ctx.rotate(-Math.PI / 4);
-    ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.8;
-    if (q.type === 'ring') { ctx.beginPath(); ctx.arc(0, 0, 5, 0, TAU); ctx.stroke(); for (let i = 0; i < 6; i++) { const a = i * TAU / 6; ctx.fillRect(Math.cos(a) * 8 - 1, Math.sin(a) * 8 - 1, 2, 2); } }
-    else if (q.type === 'hyper') { for (const o of [-4, 0, 4]) { ctx.beginPath(); ctx.moveTo(o - 2, -5); ctx.lineTo(o + 2, 0); ctx.lineTo(o - 2, 5); ctx.stroke(); } }
-    else { ctx.beginPath(); ctx.moveTo(2, -7); ctx.lineTo(-3, 1); ctx.lineTo(1, 1); ctx.lineTo(-2, 7); ctx.lineTo(4, -1); ctx.lineTo(0, -1); ctx.closePath(); ctx.fill(); }
+    powGlyph(q.type, col);
     ctx.restore();
   }
   for (const b of obs) drawObstacle(b);

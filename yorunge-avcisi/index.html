@@ -75,6 +75,7 @@ h2{font-size:30px;line-height:1;letter-spacing:.02em}
 .guide-list b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px}
 #guide{z-index:9}
 [hidden]{display:none!important}
+#muteBtn[aria-pressed="false"],#muteBtn2[aria-pressed="false"]{text-decoration:line-through;text-decoration-thickness:2px}
 </style>
 </head>
 <body>
@@ -1140,7 +1141,7 @@ function render() {
 /* ---------- flow ---------- */
 const ui = { menu: $('menu'), pause: $('pause'), over: $('over'), pauseBtn: $('pauseBtn'), bombBtn: $('bombBtn') };
 function updateBombBtn() { $('bombN').textContent = player ? player.bombs : 0; ui.bombBtn.disabled = !player || player.bombs <= 0; }
-function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { const b = $(id); b.setAttribute('aria-pressed', String(!muted)); b.textContent = muted ? 'Ses kapalı' : 'Ses'; } }
+function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { const b = $(id); b.setAttribute('aria-pressed', String(!muted)); b.textContent = 'Ses'; } }
 function toggleMute() { muted = !muted; try { localStorage.setItem('yorunge_mute', muted ? '1' : '0'); } catch (e) {} setMuteUI(); if (!muted) { audioInit(); sfx('item'); } }
 function startGame() {
   audioInit(); resetGame(); state = 'play';
