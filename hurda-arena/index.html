@@ -131,7 +131,7 @@ h2{font-size:46px}
         <li><b>Harita</b>Sol üstteki küçük harita bütün arenayı gösterir; ayarlardan kapatılabilir.</li>
         <li><b>Duraklat</b>Duraklatınca taktığın modüller ve seviyeleri görünür.</li>
         <li><b>Atıl</b>Sağ alttaki tuş seni kısa süre dokunulmaz olarak ileri fırlatır. Tuşun içi dolunca yeniden kullanılabilir.</li>
-        <li><b>Robotlar</b>Tarayıcı hızlıdır, Nişancı uzaktan ateş eder, Fünye yaklaşınca patlar, Bölünen üçe ayrılır, Ezici dayanıklıdır. Mayın önce durur, sonra sana kilitlenip hızla atılır; yolundan çekil. Her beşinci dalgada Pres gelir; kırmızı çizgiyle nişan alıp kasaların içinden geçen bir lazer atar, çizgiden çekil.</li>
+        <li><b>Robotlar</b>Tarayıcı hızlıdır, Nişancı uzaktan ateş eder, Fünye yaklaşınca patlar, Bölünen üçe ayrılır, Ezici dayanıklıdır. Mayın önce durur, sonra sana kilitlenip hızla atılır; yolundan çekil. Her beşinci dalgada Pres gelir; kırmızı çizgiyle nişan alıp kasaların içinden geçen bir lazer atar. Çizgi kalınlaşıp yanıp sönmeye başlayınca yönü sabitlenir; o an yana çekil.</li>
         <li><b>Modüller</b>Her dalgadan sonra üç modülden birini seç; kulen güçlenir.</li>
         <li><b>Toplama</b>Hurda puan getirir; dalga bitince sadece yakındaki hurdalar sana gelir. Dalga sonunda onarım yapılmaz, yeşil kutular onarır. Kenardaki oklar ekran dışındaki robotları gösterir.</li>
         <li><b>Klavye</b>WASD hareket, fare nişan, Boşluk atılma.</li>
@@ -567,13 +567,15 @@ function updBoss(e, dt, dist, ux, uy) {
   if (e.lz) {
     e.lz.t -= dt;
     if (e.lz.phase === 'aim') {
-      const want = Math.atan2(P.y - e.y, P.x - e.x);
-      e.lz.ang += clamp(((want - e.lz.ang + Math.PI * 3) % TAU) - Math.PI, -0.9 * dt, 0.9 * dt);
+      if (e.lz.t > 0.5) {
+        const want = Math.atan2(P.y - e.y, P.x - e.x);
+        e.lz.ang += clamp(((want - e.lz.ang + Math.PI * 3) % TAU) - Math.PI, -0.5 * dt, 0.5 * dt);
+      }
       if (e.lz.t <= 0) { e.lz.phase = 'fire'; e.lz.t = 0.35; bossBeam(e, e.lz.ang); }
     } else if (e.lz.t <= 0) e.lz = null;
   } else if (e.st === 'chase') {
     e.lzT = (e.lzT === undefined ? 3.5 : e.lzT) - dt;
-    if (e.lzT <= 0 && dist < 520) { e.lzT = rand(4.5, 6.5) - Math.min(1.5, (waveN / 5 - 1) * 0.3); e.lz = { phase: 'aim', t: 1.0, ang: Math.atan2(P.y - e.y, P.x - e.x) }; sfx('fuse'); }
+    if (e.lzT <= 0 && dist < 520) { e.lzT = rand(7, 9) - Math.min(1, (waveN / 5 - 1) * 0.2); e.lz = { phase: 'aim', t: 1.5, ang: Math.atan2(P.y - e.y, P.x - e.x) }; sfx('fuse'); }
   }
   if (e.st === 'chase') {
     // steer around obstacles instead of grinding against them
@@ -674,7 +676,7 @@ function bossBeam(e, ang) {
   const x1 = x0 + cx * len, y1 = y0 + cy * len;
   if (P.alive && P.dashT <= 0 && len > 0) {
     const t = clamp(((P.x - x0) * cx + (P.y - y0) * cy) / len, 0, 1);
-    if (Math.hypot(P.x - (x0 + cx * len * t), P.y - (y0 + cy * len * t)) < P.r + 9) hurt(24);
+    if (Math.hypot(P.x - (x0 + cx * len * t), P.y - (y0 + cy * len * t)) < P.r + 4) hurt(15);
   }
   beams.push({ x0, y0, x1, y1, t: 0.35, max: 0.35, boss: true });
   shake = Math.max(shake, 7); sfx('laser');
@@ -1051,7 +1053,7 @@ function drawEnemy(e) {
     case 'boss': {
       if (e.lz && e.lz.phase === 'aim') {
         ctx.save(); ctx.rotate(e.lz.ang);
-        ctx.strokeStyle = `rgba(255,59,59,${0.35 + 0.3 * (Math.floor(e.t * 16) % 2)})`; ctx.lineWidth = 1 + (1 - e.lz.t) * 3;
+        const locked = e.lz.t <= 0.5; ctx.strokeStyle = locked ? `rgba(255,59,59,${0.55 + 0.35 * (Math.floor(e.t * 20) % 2)})` : 'rgba(255,59,59,0.35)'; ctx.lineWidth = locked ? 3 : 1;
         ctx.beginPath(); ctx.moveTo(30, 0); ctx.lineTo(1200, 0); ctx.stroke();
         ctx.restore();
       }
