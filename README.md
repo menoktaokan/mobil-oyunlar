@@ -17,6 +17,7 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 | İniş Penceresi | Ay'a iniş | [`inis-penceresi/`](inis-penceresi/) |
 | Lunapark Pinball | Pinball | [`lunapark-pinball/`](lunapark-pinball/) |
 | Sazlık Avı | Ördek avı | [`sazlik-avi/`](sazlik-avi/) |
+| Hurda Arena Seviyeli | Arena tank savaşı, Kolay / Orta / Zor | [`hurda-arena-seviyeli/`](hurda-arena-seviyeli/) |
 
 ## Oynamak
 
