@@ -18,6 +18,7 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 | Lunapark Pinball | Pinball | [`lunapark-pinball/`](lunapark-pinball/) |
 | Sazlık Avı | Ördek avı | [`sazlik-avi/`](sazlik-avi/) |
 | Hurda Arena Seviyeli | Arena tank savaşı, Kolay / Orta / Zor | [`hurda-arena-seviyeli/`](hurda-arena-seviyeli/) |
+| Mahalle Kedisi | Labirent kaçışı | [`mahalle-kedisi/`](mahalle-kedisi/) |
 
 ## Oynamak
 
