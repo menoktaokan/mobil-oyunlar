@@ -709,7 +709,7 @@ function setWeaponUI() { const b = $('wpnBtn'); b.dataset.w = P.weapon; b.textCo
 function dropMine() {
   if (state !== 'play' || !P.alive || !SX.layer || P.mineCD > 0) return;
   if (pMines.length >= 1 + SX.layer) { const o = pMines.shift(); spark(o.x, o.y, C.teal, 5); }
-  pMines.push({ x: P.x, y: P.y, t: 0, R: 50 + 8 * SX.layer, dmg: SX.dmg * (4 + 1.5 * SX.layer) });
+  pMines.push({ x: P.x, y: P.y, t: 0, R: 50 + 8 * SX.layer, trig: 34 + 4 * SX.layer, dmg: SX.dmg * (4 + 1.5 * SX.layer) });
   P.mineCD = SX.mineCD; sfx('drop');
 }
 function updOwnOrdnance(dt) {
@@ -718,7 +718,7 @@ function updOwnOrdnance(dt) {
   for (const m of pMines) {
     m.t += dt;
     if (m.t < 0.6) continue;
-    for (const e of ens) if (!e.dead && Math.hypot(e.x - m.x, e.y - m.y) < e.r + 12) { m.dead = true; pBlast(m.x, m.y, m.R, m.dmg, C.teal, 9); break; }
+    for (const e of ens) if (!e.dead && Math.hypot(e.x - m.x, e.y - m.y) < e.r + m.trig) { m.dead = true; pBlast(m.x, m.y, m.R, m.dmg, C.teal, 9); break; }
   }
   pMines = pMines.filter(m => !m.dead);
   if (P.mineCD > 0) P.mineCD -= dt;
@@ -735,7 +735,8 @@ function drawOrdnanceFloor() {
   }
   for (const m of pMines) {
     const armed = m.t >= 0.6, on = !armed || Math.floor(m.t * 2.5) % 2 === 0;
-    if (armed) { ctx.strokeStyle = 'rgba(56,224,198,0.16)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(m.x, m.y, m.R, 0, TAU); ctx.stroke(); }
+    // trigger zone: a robot stepping inside the dashed ring sets the mine off
+    if (armed) { ctx.strokeStyle = 'rgba(56,224,198,0.38)'; ctx.lineWidth = 1.2; ctx.setLineDash([4, 5]); ctx.beginPath(); ctx.arc(m.x, m.y, m.trig + 6, clock * 0.8, clock * 0.8 + TAU); ctx.stroke(); ctx.setLineDash([]); }
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(m.x + 2, m.y + 3, 9, 7, 0, 0, TAU); ctx.fill();
     ctx.fillStyle = '#2b2f33'; ctx.beginPath(); ctx.arc(m.x, m.y, 8, 0, TAU); ctx.fill();
     ctx.strokeStyle = C.teal; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(m.x, m.y, 8, 0, TAU); ctx.stroke();
