@@ -1084,7 +1084,7 @@ function render() {
     ctx.drawImage(nebula, 0, off - H, W, H); ctx.drawImage(nebula, 0, off, W, H);
   }
   for (const s of stars) {
-    if (state !== 'menu') { ctx.fillStyle = `rgba(160,165,205,${0.08 + s.z * 0.26})`; const z = 0.5 + s.z * 0.7; ctx.fillRect(s.x, s.y, z, z * (overdrive > 0 ? 3 : 1)); continue; }
+    if (state !== 'menu') { ctx.fillStyle = `rgba(170,175,215,${0.14 + s.z * 0.4})`; const z = 0.6 + s.z * 0.9; ctx.fillRect(s.x, s.y, z, z * (overdrive > 0 ? 3 : 1)); continue; }
     const b = 0.25 + s.z * 0.75;
     ctx.fillStyle = s.z > 0.85 ? `rgba(200,240,255,${b})` : `rgba(190,180,240,${b * 0.8})`;
     const sz = 0.6 + s.z * 1.4;
@@ -1315,9 +1315,9 @@ function render3() {
   if (nebula) { const off = (clock * 6) % H; ctx.drawImage(nebula, 0, off - H, W, H); ctx.drawImage(nebula, 0, off, W, H); }
   // stars stay faint, small and round in play so they never pass for shots
   for (const s of stars) {
-    const b = 0.08 + s.z * 0.26;
-    ctx.fillStyle = `rgba(160,165,205,${b})`;
-    const sz = 0.5 + s.z * 0.7;
+    const b = 0.14 + s.z * 0.4;
+    ctx.fillStyle = `rgba(170,175,215,${b})`;
+    const sz = 0.6 + s.z * 0.9;
     ctx.fillRect(s.x, s.y, sz, sz * (overdrive > 0 ? 3 : 1));
   }
   // engine flames and the boss core glow sit behind the hulls
