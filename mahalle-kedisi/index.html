@@ -123,6 +123,7 @@ h2{font-size:34px}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -147,7 +148,8 @@ function resize() {
   cv.style.width = ww + 'px'; cv.style.height = sh + 'px';
   const availH = H - HUD - 8;
   T = Math.min(W / COLS, availH / ROWS);
-  ox = (W - COLS * T) / 2; oy = HUD + Math.min(14, Math.max(0, (availH - ROWS * T) / 2));
+  ox = (W - COLS * T) / 2; oy = HUD + 4 + Math.max(0, (availH - ROWS * T) / 2);
+  if (initT3()) sizeT3(cv.width, cv.height);
   if (maze) buildArt();
 }
 
@@ -323,6 +325,319 @@ function buildArt() {
   g.font = `800 ${T * 0.42}px Sniglet, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(245,234,215,0.35)';
   g.fillText('KULÜBE', 7.5 * T, 10.5 * T);
   art = c;
+  if (K3) build3D();
+}
+
+/* ---------- 3D scene (Three.js) ---------- */
+// orthographic camera tilted back from straight down: a ground point of the 2D map lands on the same screen point,
+// so movement, swipes and the HUD keep working in map coordinates
+const CATS = 1.15, TILT = 0.62, COSV = Math.cos(TILT), SINV = Math.sin(TILT), CAP = COLS * (ROWS + 40);
+let K3 = null;
+const wz = py => py / COSV;                      // map y (px) -> world z
+const lift = h => h * SINV;                       // screen offset of a point at height h
+function initT3() {
+  if (K3 !== null) return K3;
+  K3 = false;
+  if (typeof THREE === 'undefined') return K3;
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setClearColor(0x1b1822, 1); renderer.setPixelRatio(1);
+    // the 3D view sits under the 2D canvas, which keeps only the HUD and overlays
+    const el = renderer.domElement; el.style.position = 'absolute'; el.style.left = '0'; el.style.top = '0'; el.style.zIndex = '0';
+    cv.style.position = 'relative'; cv.style.zIndex = '1';
+    wrap.insertBefore(el, cv);
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(0, W, 0, -640, -4000, 4000);
+    camera.position.set(0, 1000 * COSV, 1000 * SINV); camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0);
+    scene.add(new THREE.AmbientLight(0x9096c0, 0.55));
+    scene.add(new THREE.HemisphereLight(0xc4d0ff, 0x3a2626, 0.45));
+    const moon = new THREE.DirectionalLight(0xe4e9ff, 0.7); moon.position.set(-260, 520, 380); scene.add(moon);
+    const glow = new THREE.PointLight(0xffc062, 1.1, 200, 1.4); scene.add(glow);
+    K3 = { renderer, scene, camera, glow, mats: {}, geo: {} };
+    buildStatic3D(); buildActors3D();
+  } catch (e) { K3 = false; }
+  return K3;
+}
+function sizeT3(pxW, pxH) {
+  if (!K3) return;
+  K3.renderer.setSize(pxW, pxH, false);
+  K3.renderer.domElement.style.width = cv.style.width; K3.renderer.domElement.style.height = cv.style.height;
+  const c = K3.camera; c.left = 0; c.right = W; c.top = 0; c.bottom = -H; c.updateProjectionMatrix();
+  const rad = T * 6; K3.glow.distance = rad;
+}
+function M(col, o) {
+  const key = col + JSON.stringify(o || {});
+  if (!K3.mats[key]) K3.mats[key] = new THREE.MeshStandardMaterial(Object.assign({ color: col, roughness: 0.8, metalness: 0.02, flatShading: true }, o || {}));
+  return K3.mats[key];
+}
+function part(geo, mat, x, y, z, sx, sy, sz) { const o = new THREE.Mesh(geo, mat); o.position.set(x || 0, y || 0, z || 0); if (sx) o.scale.set(sx, sy, sz); return o; }
+function tileTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  g.fillStyle = '#a65439'; g.fillRect(0, 0, 64, 64);
+  for (let r = 0; r < 4; r++) {
+    g.fillStyle = 'rgba(60,18,10,0.45)'; g.fillRect(0, r * 16 + 13, 64, 3);
+    for (let s = 0; s < 4; s++) { const x = s * 16 + (r % 2) * 8; g.fillStyle = 'rgba(255,190,150,0.13)'; g.fillRect(x + 2, r * 16 + 2, 11, 8); g.fillStyle = 'rgba(60,18,10,0.35)'; g.fillRect(x, r * 16, 1.5, 13); }
+  }
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 2; return t;
+}
+// one-off meshes with fixed capacity; each level only rewrites the instance matrices
+function buildStatic3D() {
+  const G = K3.geo, sc = K3.scene;
+  G.sphere = new THREE.SphereGeometry(1, 14, 10);
+  G.lowSphere = new THREE.SphereGeometry(1, 8, 6);
+  G.box = new THREE.BoxGeometry(1, 1, 1);
+  G.cyl = new THREE.CylinderGeometry(1, 1, 1, 10);
+  G.cone = new THREE.ConeGeometry(1, 1, 4);
+  G.disc = new THREE.CircleGeometry(1, 20);
+  G.plane = new THREE.PlaneGeometry(1, 1);
+  const roof = new THREE.MeshStandardMaterial({ map: tileTexture(), roughness: 0.85, flatShading: true });
+  const plaster = new THREE.MeshStandardMaterial({ color: 0x9a7a68, roughness: 0.9, flatShading: true });
+  K3.roof = roof;
+  K3.houses = new THREE.InstancedMesh(G.box, [plaster, plaster, roof, plaster, plaster, plaster], CAP);
+  K3.houses.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
+  K3.fence = new THREE.InstancedMesh(G.box, M(0x6b4a2e), CAP);
+  K3.chim = new THREE.InstancedMesh(G.box, M(0x7d4330), CAP);
+  K3.win = new THREE.InstancedMesh(G.plane, new THREE.MeshBasicMaterial({ color: 0xffffff }), CAP * 2);
+  K3.win.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 2 * 3), 3);
+  K3.kib = new THREE.InstancedMesh(G.lowSphere, M(0xd9a86a, { roughness: 0.6 }), CAP);
+  for (const m of [K3.houses, K3.fence, K3.chim, K3.win, K3.kib]) { m.count = 0; m.frustumCulled = false; sc.add(m); }
+  K3.ground = new THREE.Mesh(G.plane, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 }));
+  K3.ground.rotation.x = -Math.PI / 2; sc.add(K3.ground);
+  K3.under = new THREE.Mesh(G.plane, new THREE.MeshStandardMaterial({ color: 0x24202b, roughness: 1 }));
+  K3.under.rotation.x = -Math.PI / 2; K3.under.position.y = -0.5; sc.add(K3.under);
+  K3.gate = part(G.box, M(0xd8b37a), 0, 0, 0); sc.add(K3.gate);
+  // the four livers in the corners
+  K3.livers = [];
+  for (let i = 0; i < 4; i++) {
+    const g = new THREE.Group();
+    g.add(part(G.sphere, M(0x8e2a2a, { emissive: 0x5a0d0d, roughness: 0.35 }), 0, 0, 0, 0.3, 0.17, 0.24));
+    g.add(part(G.sphere, M(0xa33a36, { emissive: 0x5a0d0d, roughness: 0.35 }), 0.1, 0.06, 0.06, 0.16, 0.1, 0.14));
+    const halo = part(G.disc, new THREE.MeshBasicMaterial({ color: 0xff7a6e, transparent: true, opacity: 0.28, depthWrite: false }), 0, -0.14, 0, 0.55, 0.55, 0.55);
+    halo.rotation.x = -Math.PI / 2; g.add(halo); g.userData.halo = halo;
+    sc.add(g); K3.livers.push(g);
+  }
+  // milk bowl
+  const bowl = new THREE.Group();
+  bowl.add(part(G.cyl, M(0x3d7bd9, { roughness: 0.4 }), 0, 0.08, 0, 0.34, 0.16, 0.34));
+  bowl.add(part(G.cyl, M(0xfbfaf5, { roughness: 0.3, emissive: 0x222222 }), 0, 0.165, 0, 0.27, 0.01, 0.27));
+  sc.add(bowl); K3.bowl = bowl;
+}
+function shadowDisc() { const s = part(K3.geo.disc, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, depthWrite: false }), 0, 0.01, 0, 0.36, 0.36, 0.36); s.rotation.x = -Math.PI / 2; return s; }
+function legSet(g, mat, xs, zs, r, h) {
+  const legs = [];
+  for (const x of xs) for (const z of zs) { const pv = new THREE.Group(); pv.position.set(x, h, z); pv.add(part(K3.geo.cyl, mat, 0, -h / 2, 0, r, h, r)); g.add(pv); legs.push(pv); }
+  return legs;
+}
+function buildCat() {
+  const G = K3.geo, g = new THREE.Group(), body = new THREE.Group();
+  const fur = M(0xf08a2c), dark = M(0xc4621a), light = M(0xf7c08a);
+  body.add(part(G.sphere, fur, -0.04, 0.3, 0, 0.36, 0.22, 0.23));
+  for (const x of [-0.2, -0.06, 0.08]) body.add(part(G.sphere, dark, x, 0.3, 0, 0.045, 0.228, 0.236));
+  const head = new THREE.Group(); head.position.set(0.3, 0.44, 0);
+  head.add(part(G.sphere, M(0xf39a3e), 0, 0, 0, 0.2, 0.19, 0.2));
+  for (const k of [-1, 1]) {
+    const ear = part(G.cone, fur, -0.02, 0.18, k * 0.1, 0.075, 0.16, 0.075); ear.rotation.x = k * 0.35; head.add(ear);
+    head.add(part(G.sphere, M(0xc6f04f, { emissive: 0x6f9a10, roughness: 0.3 }), 0.165, 0.04, k * 0.085, 0.045, 0.05, 0.04));
+    head.add(part(G.box, M(0x1c1410), 0.205, 0.04, k * 0.085, 0.012, 0.06, 0.016));
+  }
+  head.add(part(G.sphere, M(0xe8737e), 0.2, -0.03, 0, 0.032, 0.028, 0.032));
+  head.add(part(G.sphere, light, 0.15, -0.08, 0, 0.08, 0.06, 0.1));
+  body.add(head);
+  const legs = legSet(body, light, [0.17, -0.2], [-0.12, 0.12], 0.05, 0.2);
+  const tail = new THREE.Group(); tail.position.set(-0.36, 0.34, 0);
+  const tl = part(G.cyl, dark, -0.14, 0.12, 0, 0.045, 0.34, 0.045); tl.rotation.z = 0.85; tail.add(tl);
+  body.add(tail);
+  g.add(body); g.add(shadowDisc());
+  g.userData = { body, legs, tail };
+  return g;
+}
+function buildDog(i) {
+  const D = DOGS[i], G = K3.geo, g = new THREE.Group(), body = new THREE.Group();
+  const mb = new THREE.MeshStandardMaterial({ color: D.body, roughness: 0.85, flatShading: true });
+  const mh = new THREE.MeshStandardMaterial({ color: D.head, roughness: 0.85, flatShading: true });
+  const me = new THREE.MeshStandardMaterial({ color: D.ear, roughness: 0.85, flatShading: true });
+  body.add(part(G.sphere, mb, -0.05, 0.33, 0, 0.38, 0.25, 0.26));
+  if (i === 1) for (let k = 0; k < 8; k++) { const a = k * TAU / 8; body.add(part(G.sphere, mb, -0.05 + Math.cos(a) * 0.28, 0.38 + Math.abs(Math.sin(a)) * 0.05, Math.sin(a) * 0.17, 0.11, 0.11, 0.11)); }
+  if (i === 3) { body.add(part(G.sphere, M(0x8c5a28), -0.12, 0.5, -0.06, 0.08, 0.05, 0.08)); body.add(part(G.sphere, M(0x8c5a28), 0.05, 0.48, 0.1, 0.06, 0.05, 0.06)); }
+  const collar = part(new THREE.TorusGeometry(1, 0.22, 6, 14), M(D.collar, { emissive: D.collar, emissiveIntensity: 0.25 }), 0.2, 0.43, 0, 0.17, 0.17, 0.17); collar.rotation.y = Math.PI / 2; body.add(collar);
+  const head = new THREE.Group(); head.position.set(0.34, 0.5, 0);
+  head.add(part(G.sphere, mh, 0, 0, 0, 0.19, 0.18, 0.19));
+  head.add(part(G.sphere, mh, 0.16, -0.05, 0, 0.12, 0.09, 0.1));
+  head.add(part(G.sphere, M(0x1c1410, { roughness: 0.3 }), 0.27, -0.03, 0, 0.04, 0.035, 0.045));
+  const eyeMat = new THREE.MeshStandardMaterial({ color: i === 0 ? 0xf2c23a : 0x1c1410, roughness: 0.3, emissive: i === 0 ? 0x6a4a00 : 0x000000 });
+  const ears = [];
+  for (const k of [-1, 1]) {
+    head.add(part(G.sphere, eyeMat, 0.13, 0.05, k * 0.08, 0.035, 0.04, 0.03));
+    const ep = new THREE.Group(); ep.position.set(-0.02, 0.12, k * 0.15);
+    const ear = part(G.sphere, me, 0, -0.06, 0, 0.09, 0.13, 0.05); ep.add(ear); ep.rotation.x = k * 0.5; head.add(ep); ears.push(ep);
+  }
+  body.add(head);
+  const legs = legSet(body, me, [0.2, -0.22], [-0.13, 0.13], 0.06, 0.22);
+  const tail = new THREE.Group(); tail.position.set(-0.4, 0.4, 0);
+  tail.add(part(G.cyl, mb, -0.07, 0.1, 0, 0.05, 0.26, 0.05)); tail.children[0].rotation.z = 0.6;
+  body.add(tail);
+  // just the eyes and collar float home after being caught
+  const ghost = new THREE.Group();
+  for (const k of [-1, 1]) {
+    ghost.add(part(G.sphere, M(0xffffff, { emissive: 0x555555 }), 0.3, 0.42, k * 0.09, 0.07, 0.07, 0.07));
+    ghost.add(part(G.sphere, M(0x1c1410), 0.36, 0.42, k * 0.09, 0.035, 0.035, 0.035));
+  }
+  const ring = part(new THREE.TorusGeometry(1, 0.22, 6, 14), M(D.collar, { emissive: D.collar, emissiveIntensity: 0.5 }), 0.12, 0.34, 0, 0.16, 0.16, 0.16); ring.rotation.y = Math.PI / 2; ghost.add(ring);
+  g.add(body); g.add(ghost); g.add(shadowDisc());
+  g.userData = { body, ghost, legs, tail, ears, mb, mh, me, D };
+  return g;
+}
+function buildActors3D() {
+  K3.cats = [buildCat(), buildCat()];
+  K3.dogs = [0, 1, 2, 3].map(i => [buildDog(i), buildDog(i)]);
+  for (const g of K3.cats) K3.scene.add(g);
+  for (const p of K3.dogs) for (const g of p) K3.scene.add(g);
+}
+// rebuild the instance matrices for the current maze and tile size
+function build3D() {
+  if (!K3 || !maze) return;
+  const m = maze.g, rnd = seeded(maze.seed + 11), mx = new THREE.Matrix4(), col = new THREE.Color();
+  const hW = T * 0.7, isWall = (x, y) => cellAt(m, x, y) === 1 && x >= 0 && x < COLS;
+  const kennelWall = (x, y) => x >= 4 && x <= 10 && y >= 8 && y <= 12;
+  const tex = new THREE.CanvasTexture(art); tex.anisotropy = 4;
+  if (K3.ground.material.map) K3.ground.material.map.dispose();
+  K3.ground.material.map = tex; K3.ground.material.needsUpdate = true;
+  K3.ground.scale.set(COLS * T, wz(ROWS * T), 1);
+  K3.ground.position.set(ox + COLS * T / 2, 0, wz(oy + ROWS * T / 2));
+  let nh = 0, nf = 0, nc = 0, nw = 0;
+  const sx = (x) => ox + (x + 0.5) * T, sz = (y) => wz(oy + (y + 0.5) * T);
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+    if (m[y][x] !== 1) continue;
+    if (kennelWall(x, y)) {
+      mx.makeScale(T + 0.4, T * 0.26, wz(T) + 0.4); mx.setPosition(sx(x), T * 0.13, sz(y)); K3.fence.setMatrixAt(nf++, mx);
+      continue;
+    }
+    mx.makeScale(T + 0.4, hW, wz(T) + 0.4); mx.setPosition(sx(x), hW / 2, sz(y)); K3.houses.setMatrixAt(nh, mx);
+    // tint only nudges: base materials carry the real colours
+    col.setRGB(0.88 + rnd() * 0.12, 0.86 + rnd() * 0.12, 0.84 + rnd() * 0.12);
+    K3.houses.setColorAt(nh, col); nh++;
+    const solid = x > 0 && x < COLS - 1 && y > 0 && y < ROWS - 1 && isWall(x - 1, y) && isWall(x + 1, y) && isWall(x, y - 1) && isWall(x, y + 1);
+    if (solid && rnd() < 0.35) { mx.makeScale(T * 0.26, T * 0.3, wz(T * 0.26)); mx.setPosition(sx(x) + (rnd() - 0.5) * T * 0.3, hW + T * 0.15, sz(y)); K3.chim.setMatrixAt(nc++, mx); }
+    // lit windows on the street-facing (camera-facing) walls
+    if (y === ROWS - 1 || cellAt(m, x, y + 1) !== 1) {
+      for (const k of [-1, 1]) {
+        mx.makeScale(T * 0.17, T * 0.22, 1); mx.setPosition(sx(x) + k * T * 0.22, hW * 0.5, wz(oy + (y + 1) * T) + 0.25);
+        K3.win.setMatrixAt(nw, mx);
+        const lit = rnd() < 0.55;
+        col.setHex(lit ? (rnd() < 0.7 ? 0xffcf6e : 0xffe2a8) : 0x2a2430); K3.win.setColorAt(nw, col); nw++;
+      }
+    }
+  }
+  // the rest of the neighbourhood around the playfield: rows of roofs split by dark alleys, dimmer than the streets you play in
+  const above = Math.ceil((oy - HUD) / T) + 1, below = Math.ceil((H - oy - ROWS * T) / T) + 1;
+  const decor = new Map(), dk = (x, y) => x + ',' + y;
+  for (let d = 1; d <= Math.max(above, below); d++) for (const y of [-d, ROWS - 1 + d]) {
+    if ((y < 0 && d > above) || (y >= ROWS && d > below)) continue;
+    const alley = d % 3 === 0;
+    for (let x = 0; x < COLS; x++) decor.set(dk(x, y), !alley && rnd() > 0.06);
+  }
+  for (const [key, house] of decor) {
+    if (!house || nh >= CAP) continue;
+    const [x, y] = key.split(',').map(Number);
+    mx.makeScale(T + 0.4, hW, wz(T) + 0.4); mx.setPosition(sx(x), hW / 2, sz(y)); K3.houses.setMatrixAt(nh, mx);
+    col.setRGB(0.62 + rnd() * 0.08, 0.6 + rnd() * 0.08, 0.64 + rnd() * 0.08); K3.houses.setColorAt(nh, col); nh++;
+    const south = y === -1 ? false : decor.get(dk(x, y + 1));
+    if (y !== -1 && !south && nw < CAP * 2 - 2) for (const k of [-1, 1]) {
+      mx.makeScale(T * 0.17, T * 0.22, 1); mx.setPosition(sx(x) + k * T * 0.22, hW * 0.5, wz(oy + (y + 1) * T) + 0.25);
+      K3.win.setMatrixAt(nw, mx); col.setHex(rnd() < 0.35 ? 0xb8904c : 0x221d27); K3.win.setColorAt(nw, col); nw++;
+    }
+  }
+  K3.under.scale.set(W * 3, wz(H * 3), 1); K3.under.position.set(W / 2, -0.5, wz(H / 2));
+  K3.houses.count = nh; K3.fence.count = nf; K3.chim.count = nc; K3.win.count = nw;
+  for (const im of [K3.houses, K3.fence, K3.chim, K3.win]) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+  K3.gate.scale.set(T * 0.9, T * 0.08, wz(T) * 0.12); K3.gate.position.set(sx(7), T * 0.2, sz(8) - wz(T) * 0.1);
+  // food list for this maze
+  K3.food = [];
+  for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) if (maze.food[y][x] === 1) K3.food.push([x, y]);
+  K3.liverAt = [[1, 3], [13, 3], [1, 17], [13, 17]];
+  for (const g of K3.livers) g.scale.setScalar(T);
+  K3.bowl.scale.setScalar(T); K3.bowl.position.set(sx(7), 0, sz(15));
+  for (const g of K3.cats) g.scale.setScalar(T * CATS);
+  for (const p of K3.dogs) for (const g of p) g.scale.setScalar(T * 1.12);
+}
+const YAW = [Math.PI / 2, Math.PI, -Math.PI / 2, 0];   // up, left, down, right -> rotation about Y (model faces +x)
+function placeActor(g, x, y) { g.position.set(ox + (x + 0.5) * T, 0, wz(oy + (y + 0.5) * T)); }
+function turnTo(g, dir, dt) {
+  const target = YAW[dir]; let a = g.rotation.y, d = target - a;
+  d = Math.atan2(Math.sin(d), Math.cos(d));
+  g.rotation.y = a + d * Math.min(1, dt * 18);
+}
+function sync3D(dt) {
+  const mx = new THREE.Matrix4();
+  // kibble
+  let n = 0;
+  for (const [x, y] of K3.food) {
+    if (maze.food[y][x] !== 1) continue;
+    mx.makeScale(T * 0.13, T * 0.08, T * 0.13); mx.setPosition(ox + (x + 0.5) * T, T * 0.1, wz(oy + (y + 0.5) * T));
+    K3.kib.setMatrixAt(n++, mx);
+  }
+  K3.kib.count = n; K3.kib.instanceMatrix.needsUpdate = true;
+  K3.livers.forEach((g, i) => {
+    const [x, y] = K3.liverAt[i];
+    g.visible = maze.food[y][x] === 2;
+    const k = 1 + Math.sin(clock * 6) * 0.1;
+    placeActor(g, x, y); g.position.y = T * (0.22 + Math.sin(clock * 3 + i) * 0.05); g.scale.setScalar(T * k); g.rotation.y = clock * 1.2 + i;
+  });
+  K3.bowl.visible = !!milk && !(milk.t < 2 && Math.floor(clock * 8) % 2 === 0);
+  // flashing roofs when a level is cleared
+  K3.roof.emissive.setHex(state === 'clear' && Math.floor(clearT * 6) % 2 === 0 ? 0x5a3a20 : 0x000000);
+  // cat (+ a twin on the far side while passing the tunnel)
+  const showCat = !!cat;
+  if (showCat) {
+    const p = posOf(cat), moving = cat.moving && state !== 'dying';
+    K3.cats.forEach((g, k) => {
+      let x = p.x;
+      if (k === 1) { if (!(p.x < 0.5 || p.x > COLS - 1.5)) { g.visible = false; return; } x = p.x < 1 ? p.x + COLS : p.x - COLS; }
+      g.visible = true; placeActor(g, x, p.y);
+      const u = g.userData, a = cat.anim * 9;
+      if (state === 'dying') {
+        const kk = clamp(dyingT / 1.4, 0, 1);
+        g.visible = kk < 1; g.scale.setScalar(T * CATS * (1 - kk * 0.8)); g.rotation.y = YAW[cat.dir] + kk * 12;
+      } else {
+        g.scale.setScalar(T * CATS); turnTo(g, cat.dir, dt);
+      }
+      u.legs.forEach((l, i) => { l.rotation.z = moving ? Math.sin(a * 2 + (i % 2 ? 0 : Math.PI) + (i > 1 ? Math.PI : 0)) * 0.6 : 0; });
+      u.body.position.y = moving ? Math.abs(Math.sin(a * 2)) * 0.03 : 0;
+      u.tail.rotation.x = Math.sin(a) * 0.5;
+    });
+    const cp = K3.cats[0].position; K3.glow.position.set(cp.x, T * 2.2, cp.z);
+  } else for (const g of K3.cats) g.visible = false;
+  // dogs
+  dogs.forEach((d, i) => {
+    const pair = K3.dogs[i];
+    const scared = d.scared && fright > 0 && d.st !== 'eaten' && d.st !== 'enter';
+    const ending = scared && fright < 1.6 && Math.floor(clock * 7) % 2 === 0;
+    const ghost = d.st === 'eaten' || d.st === 'enter';
+    pair.forEach((g, k) => {
+      let x = d.x;
+      if (k === 1) { if (ghost || d.st !== 'out' || !(d.x < 0.5 || d.x > COLS - 1.5)) { g.visible = false; return; } x = d.x < 1 ? d.x + COLS : d.x - COLS; }
+      g.visible = true; placeActor(g, x + (scared ? Math.sin(clock * 40) * 0.04 : 0), d.y);
+      const u = g.userData;
+      u.body.visible = !ghost; u.ghost.visible = ghost; g.children[2].visible = !ghost;
+      u.mb.color.set(scared ? (ending ? '#eef2f8' : '#7f93b3') : u.D.body);
+      u.mh.color.set(scared ? (ending ? '#eef2f8' : '#6f82a3') : u.D.head);
+      u.me.color.set(scared ? '#55688a' : u.D.ear);
+      turnTo(g, d.dir, dt);
+      const a = d.anim * 16;
+      u.legs.forEach((l, j) => { l.rotation.z = Math.sin(a + (j % 2 ? 0 : Math.PI) + (j > 1 ? Math.PI : 0)) * 0.55; });
+      u.tail.rotation.x = scared ? 0 : Math.sin(d.anim * 14) * 0.7;
+      u.ears.forEach((e, j) => { e.rotation.x = (j ? 1 : -1) * (scared ? 1.2 : 0.5); });
+      g.position.y = ghost ? T * 0.15 + Math.sin(clock * 6) * T * 0.05 : 0;
+    });
+  });
+}
+function render3D(dt) {
+  sync3D(dt);
+  K3.renderer.render(K3.scene, K3.camera);
+  // shade the surrounding rooftops so the playfield edge reads at a glance
+  const t = oy - lift(T * 0.7) - 1, b = oy + ROWS * T + 1;
+  if (t > 0) { const g = ctx.createLinearGradient(0, 0, 0, t); g.addColorStop(0, 'rgba(20,17,26,0.82)'); g.addColorStop(1, 'rgba(20,17,26,0.5)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, t); }
+  if (b < H) { const g = ctx.createLinearGradient(0, b, 0, H); g.addColorStop(0, 'rgba(20,17,26,0.5)'); g.addColorStop(1, 'rgba(20,17,26,0.82)'); ctx.fillStyle = g; ctx.fillRect(0, b, W, H - b); }
 }
 
 /* ---------- audio ---------- */
@@ -711,10 +1026,12 @@ function drawHUD() {
 }
 function render() {
   ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
-  ctx.fillStyle = '#1b1822'; ctx.fillRect(0, 0, W, H);
+  if (K3) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = '#1b1822'; ctx.fillRect(0, 0, W, H); }
   if (!maze) return;
   ctx.save();
-  ctx.beginPath(); ctx.rect(ox, oy, COLS * T, ROWS * T); ctx.clip();
+  ctx.beginPath(); if (K3) ctx.rect(0, state === 'menu' ? 0 : HUD, W, H); else ctx.rect(ox, oy, COLS * T, ROWS * T); ctx.clip();
+  if (K3) render3D(frameDt);
+  else {
   if (art) {
     if (state === 'clear' && Math.floor(clearT * 6) % 2 === 0) ctx.globalAlpha = 0.55;
     ctx.drawImage(art, ox, oy, COLS * T, ROWS * T);
@@ -734,7 +1051,8 @@ function render() {
       if (p.x < 0.5 || p.x > COLS - 1.5) drawCat(cxp(p.x < 1 ? p.x + COLS : p.x - COLS), cyp(p.y), cat.dir, cat.anim, 1.05);
     }
   }
-  for (const f of floats) { ctx.globalAlpha = clamp(1.2 - f.t, 0, 1); txt(f.text, cxp(f.x), cyp(f.y) - f.t * 18, '800 13px Sniglet, sans-serif', '#ffcf6e', 'center'); }
+  }
+  for (const f of floats) { ctx.globalAlpha = clamp(1.2 - f.t, 0, 1); txt(f.text, cxp(f.x), cyp(f.y) - f.t * 18 - (K3 ? lift(T * 0.7) : 0), '800 13px Sniglet, sans-serif', '#ffcf6e', 'center'); }
   ctx.globalAlpha = 1;
   ctx.restore();
   if (state === 'menu') return;
@@ -832,9 +1150,9 @@ function demo(dt) {
 }
 
 /* ---------- loop ---------- */
-let last = performance.now();
+let last = performance.now(), frameDt = 1 / 60;
 function frame(now) {
-  const dt = Math.min(0.033, Math.max(0, (now - last) / 1000)); last = now;
+  const dt = Math.min(0.033, Math.max(0, (now - last) / 1000)); last = now; frameDt = dt;
   if (state === 'play' || state === 'dying' || state === 'clear') update(dt);
   else if (state === 'menu') demo(dt);
   render();
@@ -846,7 +1164,7 @@ toMenu();
 setMuteUI();
 if (document.fonts && document.fonts.load) ['800 20px Sniglet', '500 13px Kanit'].forEach(f => document.fonts.load(f).then(() => { if (maze) buildArt(); }).catch(() => {}));
 requestAnimationFrame(frame);
-window.__kedi = { genMaze, get state() { return state; }, get cat() { return cat; }, get dogs() { return dogs; }, get maze() { return maze; }, get level() { return level; }, get score() { return score; }, get lives() { return lives; }, get left() { return left; }, get fright() { return fright; }, startGame, setWant, DIRS, OPP, canEnter, posOf, COLS, ROWS };
+window.__kedi = { get K3() { return K3; }, genMaze, get state() { return state; }, get cat() { return cat; }, get dogs() { return dogs; }, get maze() { return maze; }, get level() { return level; }, get score() { return score; }, get lives() { return lives; }, get left() { return left; }, get fright() { return fright; }, startGame, setWant, DIRS, OPP, canEnter, posOf, COLS, ROWS };
 })();
 </script>
 <script>
