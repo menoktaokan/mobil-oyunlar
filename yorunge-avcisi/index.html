@@ -145,6 +145,7 @@ h2{font-size:30px;line-height:1;letter-spacing:.02em}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -172,7 +173,8 @@ const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 /* ---------- canvas & sizing ---------- */
 const W = 360;
 let H = 640, S = 1, DPR = 1;
-const stage = $('stage'), wrap = $('wrap'), cv = $('cv'), ctx = cv.getContext('2d');
+const stage = $('stage'), wrap = $('wrap'), cv = $('cv');
+let ctx = cv.getContext('2d');
 let nebula = null;
 
 function resize() {
@@ -187,6 +189,7 @@ function resize() {
   cv.height = Math.round(sh * DPR);
   cv.style.width = ww + 'px';
   cv.style.height = sh + 'px';
+  if (initT3()) sizeT3();
   if (player) player.y = clamp(player.y, 70, H - 30);
   buildNebula();
   buildStars();
@@ -1061,6 +1064,7 @@ function drawBanner() {
 }
 
 function render() {
+  if (K3 && state !== 'menu') { render3(); return; }
   ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = C.void; ctx.fillRect(0, 0, W, H);
@@ -1135,6 +1139,229 @@ function render() {
   }
   if (flashA > 0) { ctx.globalAlpha = flashA * 0.6; ctx.fillStyle = flashCol; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
   if (state !== 'menu' && p) drawHUD();
+  drawBanner();
+}
+
+/* ---------- 3D ---------- */
+/* ---------- 3D ships (Three.js) ---------- */
+// During play the scene is split in three: stars and nebula (2D) at the back, the ships as 3D models in the middle,
+// shots, glows and the HUD (2D) in front. The camera looks down the flight path at a slant; each ship is placed so
+// it shows exactly where the 2D game puts it, so hitboxes and touch control are unchanged. The menu keeps its 2D look.
+const TILT = 0.55, COSV = Math.cos(TILT), SINV = Math.sin(TILT);
+let K3 = null, ctxT = ctx, ctxB = null;
+function initT3() {
+  if (K3 !== null) return K3;
+  K3 = false;
+  if (typeof THREE === 'undefined') return K3;
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0); renderer.setPixelRatio(1);
+    const cb = document.createElement('canvas'), el = renderer.domElement;
+    for (const c of [cb, el]) { c.style.position = 'absolute'; c.style.left = '0'; c.style.top = '0'; c.style.pointerEvents = 'none'; wrap.insertBefore(c, cv); }
+    cv.style.position = 'relative';
+    ctxB = cb.getContext('2d');
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(0, W, 0, -640, -4000, 4000);
+    camera.position.set(0, 1000 * COSV, 1000 * SINV); camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0);
+    scene.add(new THREE.AmbientLight(0x8a86b8, 0.55));
+    const key = new THREE.DirectionalLight(0xe8f4ff, 0.95); key.position.set(-300, 600, 500); scene.add(key);
+    const rim = new THREE.DirectionalLight(0xff5d8f, 0.5); rim.position.set(300, -200, -400); scene.add(rim);
+    K3 = { renderer, scene, camera, cb, pool: {}, active: [], geo: {} };
+    const G = K3.geo;
+    G.box = new THREE.BoxGeometry(1, 1, 1); G.sph = new THREE.SphereGeometry(1, 16, 12); G.oct = new THREE.OctahedronGeometry(1, 0);
+    G.cone = new THREE.ConeGeometry(1, 1, 4); G.cone8 = new THREE.ConeGeometry(1, 1, 8); G.cyl = new THREE.CylinderGeometry(1, 1, 1, 12);
+    G.cyl8 = new THREE.CylinderGeometry(1, 1, 1, 8); G.cyl6 = new THREE.CylinderGeometry(1, 1, 1, 6); G.torus = new THREE.TorusGeometry(1, 0.06, 6, 40);
+    G.arc = new THREE.TorusGeometry(1, 0.05, 4, 10, 0.6);
+    K3.ship = buildShip(); scene.add(K3.ship);
+  } catch (e) { K3 = false; }
+  return K3;
+}
+function sizeT3() {
+  if (!K3) return;
+  K3.renderer.setSize(cv.width, cv.height, false);
+  K3.cb.width = cv.width; K3.cb.height = cv.height;
+  for (const c of [K3.cb, K3.renderer.domElement]) { c.style.width = cv.style.width; c.style.height = cv.style.height; }
+}
+function mat(col, o) { return new THREE.MeshStandardMaterial(Object.assign({ color: col, roughness: 0.45, metalness: 0.35, flatShading: true }, o || {})); }
+function part(geo, m, x, y, z, sx, sy, sz) { const o = new THREE.Mesh(geo, m); o.position.set(x || 0, y || 0, z || 0); if (sx !== undefined) o.scale.set(sx, sy, sz); return o; }
+// models face "up the screen" (world -z); enemies are turned round when placed
+function buildShip() {
+  const G = K3.geo, g = new THREE.Group(), body = new THREE.Group();
+  const hull = mat(0xdfe7f3), dark = mat(0x6c7a96), glass = mat(0x8eeaff, { emissive: 0x2a8aa8, roughness: 0.15 });
+  const nose = part(G.cone, hull, 0, 0, -9, 4.2, 18, 3.2); nose.rotation.x = -Math.PI / 2; nose.rotation.y = Math.PI / 4; body.add(nose);
+  body.add(part(G.box, hull, 0, 0, 4, 7, 6, 12));
+  const wl = part(G.box, dark, -7, -0.5, 5, 13, 1.4, 8); wl.rotation.y = -0.35; body.add(wl);
+  const wr = part(G.box, hull, 7, -0.5, 5, 13, 1.4, 8); wr.rotation.y = 0.35; body.add(wr);
+  body.add(part(G.sph, glass, 0, 2.4, -4, 2.4, 1.8, 5));
+  body.add(part(G.box, mat(0xff5d8f, { emissive: 0xff5d8f, emissiveIntensity: 0.8 }), -12.5, 0, 8, 2, 1.6, 3.5));
+  body.add(part(G.box, mat(0x8eeaff, { emissive: 0x8eeaff, emissiveIntensity: 0.8 }), 12.5, 0, 8, 2, 1.6, 3.5));
+  const eng = part(G.cyl, mat(0x3a4256), 0, 0, 10.5, 2.8, 3, 2.8); eng.rotation.x = Math.PI / 2; body.add(eng);
+  g.add(body); g.userData = { body };
+  return g;
+}
+function buildEnemy(type) {
+  const G = K3.geo, g = new THREE.Group(), body = new THREE.Group(), mats = [];
+  const own = (c, o) => { const m = mat(c, o); m.userData.base = m.emissive.getHex(); mats.push(m); return m; };
+  const U = { body, mats, type };
+  if (type === 'drone') {
+    const a = part(G.cone, own(0x7a2347), 0, 0, 0, 11, 20, 4); a.rotation.x = -Math.PI / 2; a.rotation.y = Math.PI / 4; a.scale.set(11, 20, 8); body.add(a);
+    body.add(part(G.oct, own(0xff5d8f, { emissive: 0xff5d8f, emissiveIntensity: 0.6 }), 0, 2.5, -1, 4, 2.5, 5));
+  } else if (type === 'weaver') {
+    body.add(part(G.oct, own(0x3d2670), 0, 0, 0, 12, 8, 12));
+    for (const s of [-1, 1]) { const f = part(G.box, own(0xb48cff, { emissive: 0x4a2a8a }), s * 12, 0, 0, 9, 1.4, 4); f.rotation.y = s * 0.25; body.add(f); }
+    body.add(part(G.sph, own(0xb48cff, { emissive: 0xb48cff, emissiveIntensity: 0.7 }), 0, 3.6, 0, 3.5, 2.5, 3.5));
+  } else if (type === 'gunner') {
+    body.add(part(G.box, own(0x5a3a14), 0, 0, 0, 34, 10, 16));
+    body.add(part(G.box, own(0x7a5222), 0, 3.5, -2, 22, 3, 10));
+    for (const s of [-1, 1]) { const c = part(G.cyl, own(0xffb84d, { emissive: 0x6a3a00 }), s * 9, 0, -10, 2.4, 10, 2.4); c.rotation.x = Math.PI / 2; body.add(c); }
+    body.add(part(G.box, own(0xffb84d, { emissive: 0xffb84d, emissiveIntensity: 0.5 }), 0, 5.2, 0, 8, 1, 6));
+  } else if (type === 'diver') {
+    const d = part(G.cone, own(0xff6b4a, { emissive: 0x5a1a08 }), 0, 0, 0, 7, 22, 4); d.rotation.x = -Math.PI / 2; d.rotation.y = Math.PI / 4; body.add(d);
+    for (const s of [-1, 1]) { const f = part(G.box, own(0x8a2a18), s * 5, 0, 5, 6, 1, 5); f.rotation.y = s * 0.5; body.add(f); }
+  } else if (type === 'tank') {
+    const hull = part(G.cyl8, own(0x2c1f3d), 0, 0, 0, 25, 9, 25); hull.rotation.y = Math.PI / 8; body.add(hull);
+    const r = part(G.torus, mat(0xffb84d, { emissive: 0x8a5000 }), 0, 4.6, 0, 24.5, 24.5, 24.5); r.rotation.x = Math.PI / 2; body.add(r);
+    U.spin = new THREE.Group(); U.spin.position.y = 6; body.add(U.spin);
+    for (let i = 0; i < 4; i++) { const a = part(G.box, own(0xffb84d, { emissive: 0x6a3a00 }), 0, 0, 0, 5, 3, 13); const pv = new THREE.Group(); pv.rotation.y = i * Math.PI / 2; a.position.z = 15.5; pv.add(a); U.spin.add(pv); }
+    U.spin.add(part(G.cyl, own(0xffb84d, { emissive: 0xffb84d, emissiveIntensity: 0.4 }), 0, 0, 0, 9, 3, 9));
+    U.spin.add(part(G.cyl, mat(0x2c1f3d), 0, 1.6, 0, 4, 1, 4));
+  } else if (type === 'boss') {
+    const core = part(G.cyl6, own(0x1b0f2c), 0, 0, 0, 34, 14, 30); body.add(core);
+    const rr = part(new THREE.TorusGeometry(1, 0.05, 4, 6), mat(0xff5d8f, { emissive: 0xff5d8f, emissiveIntensity: 0.6 }), 0, 7, 0, 33, 30, 33); rr.rotation.x = Math.PI / 2; body.add(rr);
+    for (const s of [-1, 1]) {
+      const w = new THREE.Group(); w.position.x = s * 44;
+      w.add(part(G.box, own(0x2a1640), 0, 0, 2, 34, 6, 32));
+      w.add(part(G.box, mat(0xb48cff, { emissive: 0x5a3a9a }), s * 15, 3.5, 2, 3, 1, 32));
+      w.rotation.y = s * -0.18; body.add(w);
+    }
+    U.ringA = new THREE.Group(); U.ringB = new THREE.Group(); body.add(U.ringA); body.add(U.ringB);
+    const va = mat(0xb48cff, { emissive: 0xb48cff, emissiveIntensity: 0.7 }), ro = mat(0xff5d8f, { emissive: 0xff5d8f, emissiveIntensity: 0.6 });
+    for (let i = 0; i < 6; i++) { const a = part(G.arc, va, 0, 0, 0, 50, 50, 50); a.rotation.x = Math.PI / 2; a.rotation.z = i * TAU / 6; U.ringA.add(a); }
+    for (let i = 0; i < 10; i++) { const a = part(new THREE.TorusGeometry(1, 0.03, 4, 6, 0.25), ro, 0, 0, 0, 58, 58, 58); a.rotation.x = Math.PI / 2; a.rotation.z = i * TAU / 10; U.ringB.add(a); }
+  }
+  g.add(body); g.userData = U;
+  return g;
+}
+function take(type) {
+  const pool = K3.pool[type] || (K3.pool[type] = []);
+  const g = pool.pop() || buildEnemy(type);
+  if (!g.parent) K3.scene.add(g);
+  g.visible = true; K3.active.push(g);
+  return g;
+}
+function sync3D() {
+  for (const g of K3.active) g.userData.used = false;
+  const p = player, sh = K3.ship;
+  sh.visible = !!(p && p.alive) && !(p.inv > 0 && Math.floor(clock * 14) % 2 === 0);
+  if (p) {
+    sh.position.set(p.x, 0, p.y / COSV); sh.scale.setScalar(1.25);
+    sh.userData.body.rotation.z = -(p.tilt || 0) * 0.65;
+  }
+  for (const e of ens) {
+    if (!e._m || e._m.userData.type !== e.type) e._m = take(e.type);
+    const g = e._m, U = g.userData; U.used = true;
+    g.position.set(e.x, 0, e.y / COSV); g.scale.setScalar(e.type === 'boss' ? 1 : 1.12);
+    const hit = e.flash > 0;
+    for (const m of U.mats) m.emissive.setHex(hit ? 0xffffff : m.userData.base);
+    const b = U.body;
+    switch (e.type) {
+      case 'drone': b.rotation.set(0, Math.PI + (e.vx || 0) * -0.004, Math.sin(e.t * 3) * 0.3); break;
+      case 'weaver': b.rotation.set(0, Math.PI, Math.sin(e.t * 2.2 + e.ph) * 0.6); break;
+      case 'gunner': b.rotation.set(0.15, Math.PI, Math.sin(e.t * 1.3 + e.ph) * 0.12); break;
+      case 'diver': {
+        const a = e.st === 1 ? Math.atan2(e.vy, e.vx) : Math.atan2(player.y - e.y, player.x - e.x);
+        b.rotation.set(0, -Math.atan2(Math.sin(a) / COSV, Math.cos(a)) - Math.PI / 2, e.t * 4); break;
+      }
+      case 'tank': b.rotation.set(0.2, 0, 0); U.spin.rotation.y = -(e.rot || 0); break;
+      case 'boss': b.rotation.set(0.12, 0, Math.sin(e.t * 0.7) * 0.05); U.ringA.rotation.y = -e.t * 0.5; U.ringB.rotation.y = e.t * 0.7; break;
+    }
+  }
+  K3.active = K3.active.filter(g => {
+    if (g.userData.used) return true;
+    g.visible = false; (K3.pool[g.userData.type] || (K3.pool[g.userData.type] = [])).push(g);
+    return false;
+  });
+}
+function render3() {
+  const sx = shake > 0 ? rand(-shake, shake) * 0.5 : 0, sy = shake > 0 ? rand(-shake, shake) * 0.5 : 0;
+  // back: space
+  ctx = ctxB;
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = C.void; ctx.fillRect(0, 0, W, H);
+  if (nebula) { const off = (clock * 6) % H; ctx.drawImage(nebula, 0, off - H, W, H); ctx.drawImage(nebula, 0, off, W, H); }
+  for (const s of stars) {
+    const b = 0.25 + s.z * 0.75;
+    ctx.fillStyle = s.z > 0.85 ? `rgba(200,240,255,${b})` : `rgba(190,180,240,${b * 0.8})`;
+    const sz = 0.6 + s.z * 1.4;
+    ctx.fillRect(s.x, s.y, sz, sz * (overdrive > 0 ? 4 : 1 + s.z));
+  }
+  // engine flames and the boss core glow sit behind the hulls
+  ctx.save(); ctx.translate(sx, sy); ctx.globalCompositeOperation = 'lighter';
+  const p = player;
+  if (p && p.alive && !(p.inv > 0 && Math.floor(clock * 14) % 2 === 0)) {
+    const fl = 0.8 + Math.random() * 0.5;
+    ctx.drawImage(SPR.ice.c, p.x - 7, p.y + 8, 14, 20 * fl);
+    if (overdrive > 0) ctx.drawImage(SPR.gold.c, p.x - 10, p.y + 10, 20, 28 * fl);
+  }
+  for (const e of ens) if (e.type === 'diver' && e.st === 1) { ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(Math.atan2(e.vy, e.vx) - Math.PI / 2); ctx.drawImage(SPR.ember.c, -6, -20, 12, 16); ctx.restore(); }
+  ctx.restore();
+  // middle: ships
+  const c = K3.camera; c.left = -sx; c.right = W - sx; c.top = sy; c.bottom = -H + sy; c.updateProjectionMatrix();
+  sync3D(); K3.renderer.render(K3.scene, K3.camera);
+  // front: pickups, shots, sparks, text, HUD
+  ctx = ctxT;
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0); ctx.clearRect(0, 0, W, H);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.save(); ctx.translate(sx, sy);
+  ctx.globalCompositeOperation = 'lighter';
+  for (const g of gems) drawSpr(SPR.gold, g.x, g.y, g.small ? 0.7 : 1);
+  if (boss && !boss.dead) { const pulse = 1 + Math.sin(boss.t * 6) * 0.08 + (boss.ph === 3 ? 0.25 : boss.ph === 2 ? 0.12 : 0); drawSpr(SPR.core, boss.x, boss.y - 6, 0.75 * pulse); }
+  ctx.globalCompositeOperation = 'source-over';
+  for (const it of items) drawItem(it);
+  for (const e of ens) if ((e.type === 'gunner' || e.type === 'tank') && e.hp < e.maxhp) {
+    const w = e.r * 1.6, T = TYPES[e.type];
+    ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(e.x - w / 2, e.y - e.r - 10, w, 2);
+    ctx.fillStyle = T.col; ctx.fillRect(e.x - w / 2, e.y - e.r - 10, w * Math.max(0, e.hp / e.maxhp), 2);
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  for (const b of pB) {
+    if (b.k === 's') ctx.drawImage(SPR.ice.c, b.x - 3.5, b.y - 9, 7, 18);
+    else if (b.k === 'l') ctx.drawImage(SPR.lav.c, b.x - 3, b.y - 15, 6, 30);
+    else drawSpr(SPR.ember, b.x, b.y, 0.8);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  if (p && p.alive) {
+    if (p.shield > 0) { ctx.strokeStyle = C.mint; ctx.globalAlpha = 0.55 + Math.sin(clock * 6) * 0.2; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.ellipse(p.x, p.y, 22, 22 * COSV + 4, 0, 0, TAU); ctx.stroke(); ctx.globalAlpha = 1; }
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(p.x, p.y, 2.6, 0, TAU); ctx.fill();
+    ctx.strokeStyle = C.rose; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(p.x, p.y, 3.8, 0, TAU); ctx.stroke();
+    if (keys['shift']) { ctx.strokeStyle = 'rgba(142,234,255,0.35)'; ctx.beginPath(); ctx.arc(p.x, p.y, 24, 0, TAU); ctx.stroke(); }
+  }
+  ctx.globalCompositeOperation = 'lighter';
+  for (const b of eB) drawSpr(SPR[b.spr], b.x, b.y, b.r / 4);
+  for (const q of parts) {
+    const a = clamp(q.life / q.max, 0, 1);
+    ctx.globalAlpha = a;
+    if (q.k === 'spark') { ctx.fillStyle = q.col; ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size); }
+    else if (q.k === 'ring') { ctx.strokeStyle = q.col; ctx.lineWidth = 2.2 * a; ctx.beginPath(); ctx.arc(q.x, q.y, q.size + q.grow * (1 - a), 0, TAU); ctx.stroke(); }
+    else drawSpr(SPR.boom, q.x, q.y, q.size / SPR.boom.size * (1.3 - a * 0.3));
+  }
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.textAlign = 'center';
+  for (const f of floats) {
+    ctx.globalAlpha = clamp(1.1 - f.t, 0, 1);
+    setSpacing('1px'); ctx.font = `700 ${f.size}px "Chakra Petch", sans-serif`; ctx.fillStyle = f.col;
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  setSpacing('0px'); ctx.globalAlpha = 1;
+  ctx.restore();
+  if (overdrive > 0) {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, 'rgba(255,211,107,0.08)'); g.addColorStop(0.5, 'rgba(255,211,107,0)'); g.addColorStop(1, 'rgba(255,211,107,0.08)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  if (flashA > 0) { ctx.globalAlpha = flashA * 0.6; ctx.fillStyle = flashCol; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+  if (p) drawHUD();
   drawBanner();
 }
 
