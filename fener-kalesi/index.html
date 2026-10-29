@@ -105,7 +105,7 @@ h3{font-size:22px}
       <p class="tag">Kılavuz</p>
       <h2 id="t-guide">Nasıl oynanır</h2>
       <ul class="guide-list">
-        <li><b>Fener topu</b>Suya dokun, top oraya gülle atar. Gülle uçarken gemi ilerler, önüne nişan al. Gülleler zamanla yeniden dolar.</li>
+        <li><b>Fener topu</b>Suya dokun, top oraya gülle atar. Kanala ya da bir geminin yanına dokunmak her zaman atıştır; taret menüsü için adacığın ortasındaki ahşap platforma dokun. Gülle uçarken gemi ilerler, önüne nişan al. Gülleler zamanla yeniden dolar.</li>
         <li><b>Taretler</b>Bir adacığa dokun: Zıpkın tek hedefe hızlı atar, Havan alana hasar verir, Ağ gemileri yavaşlatır. Tesla bobini en öndeki gemiye yıldırım atar; yıldırım yakındaki gemilere seker ve her sekişte biraz zayıflar. Kurulu tarete dokunup beş seviyeye kadar yükseltebilir ya da satabilirsin.</li>
         <li><b>Kilitli adacık</b>Kilitli adacıklara dokunup altınla açabilirsin; her yeni adacık bir öncekinden pahalıdır. Açılan adacık kapanmaz.</li>
         <li><b>Feneri yükselt</b>Fenere dokunarak topun hasarını, dolum hızını ve gülle sayısını artır.</li>
@@ -855,7 +855,10 @@ wrap.addEventListener('pointerdown', e => {
   const p = lp(e);
   e.preventDefault();
   if (Math.hypot(p.x - LH.x, p.y - (LH.y - 25)) < 30) { openCannonSheet(); return; }
-  for (const pad of PADS) if (Math.hypot(p.x - pad.x, p.y - pad.y) < 20) { openPadSheet(pad); return; }
+  // a tap on the channel or next to a ship is always a shot; only a tap right on the wooden platform opens the tower menu
+  const onChannel = distToPath(p.x, p.y) < 17;
+  const nearShip = ens.some(en => !en.dead && Math.hypot(en.x - p.x, en.y - p.y) < ETY[en.t].r + 16);
+  if (!onChannel && !nearShip) for (const pad of PADS) if (Math.hypot(p.x - pad.x, p.y - pad.y) < 14) { openPadSheet(pad); return; }
   if (p.y > 46 && p.y < BOT + 4) fireCannon(p.x, p.y);
 });
 window.addEventListener('keydown', e => {
