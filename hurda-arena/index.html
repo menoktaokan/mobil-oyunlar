@@ -337,7 +337,7 @@ function rectCircleDist(x, y, w, h, cx, cy) { const dx = Math.max(x - cx, 0, cx 
 function layoutObstacles(px, py) {
   // Random layout each wave. Boxes keep a 70 px corridor between each other, stay clear of the player
   // and of anything lying on the floor, so nothing ever ends up stacked or trapped.
-  const out = [], target = 7 + Math.floor(Math.random() * 3);
+  const out = [], target = (waveN < 3 ? 5 : 7) + Math.floor(Math.random() * 3);
   for (let tries = 0; out.length < target && tries < 600; tries++) {
     const w = Math.round(rand(40, 76)), h = Math.round(rand(32, 60));
     const x = Math.round(rand(WALL + 50, AW - WALL - 50 - w)), y = Math.round(rand(WALL + 60, AH - WALL - 60 - h));
@@ -432,19 +432,22 @@ function planWave(n) {
 }
 function planWaveBase(n) {
   if (n % 5 === 0) {
-    const list = []; for (let i = 0; i < Math.round((4 + n) * 1.2); i++) list.push(i % 4 === 3 ? 'mine' : i % 3 ? 'crawler' : 'bomber');
+    const list = []; for (let i = 0; i < Math.round((4 + n) * 1.2); i++) list.push(i % 4 === 3 ? (n >= 10 ? 'mine' : 'crawler') : i % 3 ? 'crawler' : 'bomber');
     return { list, boss: true, gap: 1.6, group: 2 };
   }
-  let budget = 6 + n * 4;
+  // the first waves stay calm: fewer machines, one new kind per wave, mines only after the first Pres
+  const early = n <= 4;
+  let budget = early ? 3 + n * 3 : 6 + n * 4;
   const pool = [['crawler', 1], ['crawler', 1]];
-  if (n >= 2) pool.push(['shooter', 3], ['mine', 2]);
+  if (n >= 2) pool.push(['shooter', 3]);
   if (n >= 3) pool.push(['bomber', 2]);
   if (n >= 4) pool.push(['splitter', 3]);
-  if (n >= 6) pool.push(['brute', 5]);
+  if (n >= 6) pool.push(['mine', 2]);
+  if (n >= 7) pool.push(['brute', 5]);
   const list = [];
   while (budget > 0) { const [t, c] = pick(pool); list.push(t); budget -= c; }
-  for (let k = Math.round(list.length * 0.2); k > 0; k--) list.push(pick(pool)[0]);
-  return { list, boss: false, gap: Math.max(0.45, 1.25 - n * 0.06), group: Math.min(4, 1 + Math.floor(n / 3)) };
+  for (let k = Math.round(list.length * (early ? 0.1 : 0.2)); k > 0; k--) list.push(pick(pool)[0]);
+  return { list, boss: false, gap: Math.max(0.45, 1.25 - n * 0.06) + (n <= 3 ? 0.35 : 0), group: Math.min(4, 1 + Math.floor(n / 3)) };
 }
 function startWave() {
   waveN++;
@@ -939,7 +942,7 @@ function updHazards(dt) {
   if (active && P.alive) {
     if (Math.hypot(P.x - camp.x, P.y - camp.y) > 60) { camp.x = P.x; camp.y = P.y; camp.t = 0; }
     else camp.t += dt;
-    if (camp.t > DF.camp && bombQ === 0 && bombs.length === 0) { bombQ = 8 + Math.min(6, Math.floor(waveN / 2)); bombT = 0; camp.t = 0; sfx('alarm'); }
+    if (waveN >= 3 && camp.t > DF.camp && bombQ === 0 && bombs.length === 0) { bombQ = 8 + Math.min(6, Math.floor(waveN / 2)); bombT = 0; camp.t = 0; sfx('alarm'); }
   }
   if (bombQ > 0) {
     bombT -= dt;
