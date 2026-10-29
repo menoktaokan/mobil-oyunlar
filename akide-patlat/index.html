@@ -597,9 +597,11 @@ const ui = { menu: $('menu'), pause: $('pause'), result: $('result') };
 function showOnly(id) { for (const k in ui) ui[k].hidden = k !== id; }
 function setMuteUI() { for (const id of ['muteBtn', 'muteBtn2']) { $(id).setAttribute('aria-pressed', String(!muted)); $(id).textContent = 'Ses'; } }
 function renderLevels() {
+  // main button continues from the furthest jar; the small one replays from jar 1
+  $('startBtn').textContent = unlocked < 1 ? 'Başla' : 'Kavanoz ' + (unlocked + 1);
   const c = $('contBtn');
   c.hidden = unlocked < 1;
-  c.textContent = 'Kavanoz ' + (unlocked + 1);
+  c.textContent = 'Baştan';
 }
 function startLevel(i) { audioInit(); loadLevel(i); state = 'play'; showOnly(null); $('pauseBtn').hidden = false; }
 function pauseGame() { if (state !== 'play') return; state = 'pause'; aimDir = 0; $('pauseTag').textContent = 'Kavanoz ' + (lvl + 1); showOnly('pause'); $('pauseBtn').hidden = true; }
@@ -617,9 +619,9 @@ function showResult() {
   showOnly('result');
   $('nextBtn').focus({ preventScroll: true });
 }
-function toMenu() { state = 'menu'; selLvl = 0; loadLevel(0); renderLevels(); showOnly('menu'); $('pauseBtn').hidden = true; }
-$('startBtn').addEventListener('click', () => startLevel(0));
-$('contBtn').addEventListener('click', () => startLevel(unlocked));
+function toMenu() { state = 'menu'; selLvl = 0; loadLevel(unlocked); renderLevels(); showOnly('menu'); $('pauseBtn').hidden = true; }
+$('startBtn').addEventListener('click', () => startLevel(unlocked));
+$('contBtn').addEventListener('click', () => startLevel(0));
 $('nextBtn').addEventListener('click', () => { if (endWin) startLevel(lvl + 1); else startLevel(lvl); });
 $('resMenu').addEventListener('click', toMenu);
 $('quitBtn').addEventListener('click', toMenu);
