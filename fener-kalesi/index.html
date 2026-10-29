@@ -106,7 +106,8 @@ h3{font-size:22px}
       <h2 id="t-guide">Nasıl oynanır</h2>
       <ul class="guide-list">
         <li><b>Fener topu</b>Suya dokun, top oraya gülle atar. Gülle uçarken gemi ilerler, önüne nişan al. Gülleler zamanla yeniden dolar.</li>
-        <li><b>Taretler</b>Bir adacığa dokun: Zıpkın tek hedefe hızlı atar, Havan alana hasar verir, Ağ gemileri yavaşlatır. Kurulu tarete dokunup beş seviyeye kadar yükseltebilir ya da satabilirsin.</li>
+        <li><b>Taretler</b>Bir adacığa dokun: Zıpkın tek hedefe hızlı atar, Havan alana hasar verir, Ağ gemileri yavaşlatır. Tesla bobini en öndeki gemiye yıldırım atar; yıldırım yakındaki gemilere seker ve her sekişte biraz zayıflar. Kurulu tarete dokunup beş seviyeye kadar yükseltebilir ya da satabilirsin.</li>
+        <li><b>Kilitli adacık</b>Kilitli adacıklara dokunup altınla açabilirsin; her yeni adacık bir öncekinden pahalıdır. Açılan adacık kapanmaz.</li>
         <li><b>Feneri yükselt</b>Fenere dokunarak topun hasarını, dolum hızını ve gülle sayısını artır.</li>
         <li><b>Zor gemiler</b>Zırhlılar taret atışlarına dayanıklıdır. Dalgıçlar suya dalınca taretler onları göremez. İkisini de topunla vur.</li>
         <li><b>Kraken</b>Her onuncu dalgada gelir ve yakınındaki taretleri birkaç saniye sersemletir.</li>
@@ -188,7 +189,7 @@ function buildMap() {
   CUM = [0]; PLEN = 0;
   for (let i = 1; i < PATH.length; i++) { PLEN += Math.hypot(PATH[i].x - PATH[i - 1].x, PATH[i].y - PATH[i - 1].y); CUM.push(PLEN); }
   const old = PADS;
-  PADS = choosePads().map((p, i) => Object.assign({ tw: old[i] ? old[i].tw : null }, p));
+  PADS = choosePads().map((p, i) => Object.assign({ tw: old[i] ? old[i].tw : null, opened: old[i] ? old[i].opened : false }, p));
   LH = { x: 304, y: H - 62 };
   islands = PADS.map((p, i) => ({ x: p.x, y: p.y, r: 21 + (i % 3) * 3, seed: i * 1.7 }));
 }
@@ -217,11 +218,16 @@ function choosePads() {
     }
   }
   cands.sort((a, b) => b.cover - a.cover);
-  const out = [];
-  for (const c of cands) {
-    if (out.length >= 9) break;
-    if (out.some(o => Math.hypot(o.x - c.x, o.y - c.y) < 58)) continue;
-    out.push({ x: Math.round(c.x), y: Math.round(c.y) });
+  // the 9 best spots start open; the next 5 are locked until bought
+  let out = [];
+  for (let gap = 56; gap >= 40; gap -= 2) {
+    out = [];
+    for (const c of cands) {
+      if (out.length >= 14) break;
+      if (out.some(o => Math.hypot(o.x - c.x, o.y - c.y) < (out.length < 9 ? 58 : gap))) continue;
+      out.push({ x: Math.round(c.x), y: Math.round(c.y), lock: out.length >= 9 });
+    }
+    if (out.length >= 14) break;
   }
   out.sort((a, b) => a.y - b.y || a.x - b.x);
   return out;
@@ -262,7 +268,7 @@ function noise(dur, vol, cut) {
 const lastS = {};
 function sfx(n) {
   if (!AC || muted) return;
-  const now = performance.now(), gap = { harpoon: 60, splash: 50, net: 80, coin: 45, mortar: 90 }[n] || 0;
+  const now = performance.now(), gap = { harpoon: 60, splash: 50, net: 80, coin: 45, mortar: 90, zap: 70 }[n] || 0;
   if (gap && now - (lastS[n] || 0) < gap) return; lastS[n] = now;
   switch (n) {
     case 'cannon': noise(0.4, 0.6, 1800); tone(90, 0.3, 'sine', 0.4, -40); break;
@@ -270,6 +276,7 @@ function sfx(n) {
     case 'harpoon': tone(700, 0.06, 'triangle', 0.05, -400); break;
     case 'mortar': noise(0.25, 0.25, 900); tone(140, 0.15, 'sine', 0.2, -60); break;
     case 'net': tone(420, 0.1, 'triangle', 0.05, 200); break;
+    case 'zap': noise(0.12, 0.22, 6000); tone(1900, 0.09, 'square', 0.035, -1300); break;
     case 'sink': noise(0.6, 0.25, 700); tone(220, 0.5, 'sine', 0.08, -150); break;
     case 'coin': tone(1320, 0.05, 'square', 0.03); tone(1760, 0.07, 'square', 0.03, 0, 0.04); break;
     case 'build': tone(330, 0.07, 'square', 0.07); tone(494, 0.09, 'square', 0.07, 0, 0.07); tone(660, 0.12, 'square', 0.07, 0, 0.14); break;
@@ -291,6 +298,7 @@ try { muted = localStorage.getItem('fener_mute') === '1'; } catch (e) {}
 const TT = {
   harpoon: { name: 'Zıpkın', ic: 'Z', cost: [50, 70, 120, 200, 320], range: [80, 86, 92, 98, 104], rate: [1.1, 1.3, 1.5, 1.75, 2.0], dmg: [3, 4.5, 6.5, 9, 12] },
   mortar: { name: 'Havan', ic: 'H', cost: [80, 100, 160, 260, 400], range: [110, 116, 122, 128, 134], rate: [0.4, 0.44, 0.48, 0.52, 0.56], dmg: [6, 8.5, 11.5, 15, 20], splash: [26, 29, 32, 35, 38] },
+  tesla: { name: 'Tesla bobini', ic: 'T', cost: [90, 110, 170, 260, 400], range: [76, 80, 84, 88, 94], rate: [0.7, 0.8, 0.9, 1.0, 1.15], dmg: [5, 6.5, 8.5, 11, 14], chain: [2, 3, 3, 4, 5], chainR: [44, 48, 52, 56, 62] },
   net: { name: 'Ağ', ic: 'A', cost: [60, 70, 110, 180, 280], range: [68, 72, 76, 80, 86], rate: [0.75, 0.85, 0.95, 1.05, 1.15], dmg: [1, 1, 1.5, 2, 2.5], slow: [0.4, 0.48, 0.54, 0.6, 0.65], dur: [1.5, 1.8, 2.1, 2.4, 2.7], multi: [1, 1, 2, 2, 3] }
 };
 const CANNON = {
@@ -312,7 +320,9 @@ let phase = 'build';         // build, wave
 let gold = 160, port = 20, waveN = 0, speed = 1, clock = 0, buildT = 12;
 let ens = [], shots = [], balls = [], parts = [], floats = [], spawnQ = [], spawnT = 0;
 let can = { lvl: { dmg: 0, reload: 0, ammo: 0 }, ammo: 2, charge: 0 };
-let kills = 0, ballHits = 0, sel = null, banner = null, shake = 0;
+let kills = 0, ballHits = 0, sel = null, banner = null, shake = 0, unlocks = 0;
+const UNLOCK_COST = [60, 90, 130, 180, 240];
+const isLocked = p => p.lock && !p.opened;
 function cannonStat(k) { return CANNON[k].vals[can.lvl[k]]; }
 
 function resetGame() {
@@ -320,7 +330,8 @@ function resetGame() {
   ens = []; shots = []; balls = []; parts = []; floats = []; spawnQ = [];
   can = { lvl: { dmg: 0, reload: 0, ammo: 0 }, ammo: 2, charge: 0 };
   kills = 0; ballHits = 0; sel = null; banner = null;
-  for (const p of PADS) p.tw = null;
+  for (const p of PADS) { p.tw = null; p.opened = false; }
+  unlocks = 0;
   $('speedBtn').setAttribute('aria-pressed', 'false');
 }
 
@@ -375,7 +386,7 @@ function damage(e, d, src) {
   if (e.dead) return;
   const T = ETY[e.t];
   let dm = d;
-  if (T.armor && src !== 'cannon') dm *= src === 'mortar' ? 0.6 : 0.35;
+  if (T.armor && src !== 'cannon') dm *= src === 'mortar' ? 0.6 : src === 'tesla' ? 0.5 : 0.35;
   e.hp -= dm; e.flash = 0.08;
   if (e.hp <= 0) {
     e.dead = true; kills++;
@@ -426,7 +437,8 @@ function updTowers(dt) {
     }
     if (tw.cd > 0 || !tgt) continue;
     tw.cd = 1 / D.rate[L];
-    if (tw.type === 'harpoon') { shots.push({ k: 'harpoon', x: p.x, y: p.y, tgt, dmg: D.dmg[L], sp: 380 }); sfx('harpoon'); }
+    if (tw.type === 'tesla') { zap(p, tgt, D, L); }
+    else if (tw.type === 'harpoon') { shots.push({ k: 'harpoon', x: p.x, y: p.y, tgt, dmg: D.dmg[L], sp: 380 }); sfx('harpoon'); }
     else if (tw.type === 'mortar') {
       const lead = posAt(tgt.s + ETY[tgt.t].sp * (1 - tgt.slow) * 0.85 * 0.6);
       shots.push({ k: 'mortar', sx: p.x, sy: p.y, tx: lead.x, ty: lead.y, t: 0, T: 0.85, dmg: D.dmg[L], R: D.splash[L] });
@@ -442,8 +454,29 @@ function updTowers(dt) {
     }
   }
 }
+function zap(p, first, D, L) {
+  // one bolt that jumps from ship to ship, each jump a little weaker
+  const pts = [[p.x, p.y - 12]], hit = new Set();
+  let cur = first, dmg = D.dmg[L];
+  for (let k = 0; cur && k <= D.chain[L]; k++) {
+    hit.add(cur); pts.push([cur.x, cur.y]);
+    damage(cur, dmg, 'tesla');
+    dmg *= 0.8;
+    let nx = null, nd = D.chainR[L];
+    for (const e of ens) {
+      if (e.dead || e.sub || hit.has(e)) continue;
+      const d = Math.hypot(e.x - cur.x, e.y - cur.y);
+      if (d < nd) { nd = d; nx = e; }
+    }
+    cur = nx;
+  }
+  shots.push({ k: 'bolt', pts, t: 0.22, max: 0.22 });
+  for (let i = 1; i < pts.length; i++) parts.push({ k: 'spark', x: pts[i][0], y: pts[i][1], vx: 0, vy: 0, life: 0.25, max: 0.25, size: 3 });
+  sfx('zap');
+}
 function updShots(dt) {
   for (const s of shots) {
+    if (s.k === 'bolt') { s.t -= dt; if (s.t <= 0) s.dead = true; continue; }
     if (s.k === 'mortar') {
       s.t += dt;
       if (s.t >= s.T) {
@@ -579,7 +612,9 @@ function drawSea() {
   }
 }
 function drawIslands() {
-  for (const is of islands) {
+  for (let ii = 0; ii < islands.length; ii++) {
+    const is = islands[ii];
+    ctx.globalAlpha = PADS[ii] && isLocked(PADS[ii]) ? 0.55 : 1;
     ctx.fillStyle = 'rgba(238,246,242,0.18)'; ctx.beginPath(); ctx.arc(is.x, is.y + 1, is.r + 3 + Math.sin(clock * 1.5 + is.seed) * 1, 0, TAU); ctx.fill();
     ctx.fillStyle = C.sand; ctx.beginPath();
     for (let i = 0; i < 10; i++) { const a = i * TAU / 10, r = is.r * (0.88 + Math.sin(is.seed * 3 + i * 2.1) * 0.1); ctx.lineTo(is.x + Math.cos(a) * r, is.y + Math.sin(a) * r); }
@@ -587,11 +622,20 @@ function drawIslands() {
     ctx.fillStyle = C.grass; ctx.beginPath(); ctx.arc(is.x - is.r * 0.45, is.y - is.r * 0.35, is.r * 0.32, 0, TAU); ctx.fill();
     ctx.fillStyle = C.rock; ctx.beginPath(); ctx.arc(is.x + is.r * 0.55, is.y + is.r * 0.4, is.r * 0.22, 0, TAU); ctx.fill();
   }
+  ctx.globalAlpha = 1;
 }
 function drawPad(p, i) {
   const tw = p.tw;
   ctx.fillStyle = C.wood; ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, TAU); ctx.fill();
   ctx.strokeStyle = '#5d3b20'; ctx.lineWidth = 1.5; ctx.stroke();
+  if (isLocked(p)) {
+    ctx.fillStyle = 'rgba(12,36,48,0.55)'; ctx.beginPath(); ctx.arc(p.x, p.y, 13, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#c9b48a'; ctx.lineWidth = 1.6; ctx.setLineDash([2, 2]); ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = C.brass; ctx.fillRect(p.x - 4.5, p.y - 1, 9, 7);
+    ctx.strokeStyle = C.brass; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(p.x, p.y - 1, 3, Math.PI, 0); ctx.stroke();
+    ctx.fillStyle = '#0c2430'; ctx.fillRect(p.x - 0.8, p.y + 1, 1.6, 3);
+    return;
+  }
   if (!tw) {
     ctx.strokeStyle = 'rgba(238,246,242,0.55)'; ctx.lineWidth = 1.4; ctx.setLineDash([3, 3]);
     ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, TAU); ctx.stroke(); ctx.setLineDash([]);
@@ -601,7 +645,14 @@ function drawPad(p, i) {
   ctx.save(); ctx.translate(p.x, p.y);
   if (tw.stun > 0) ctx.globalAlpha = 0.55;
   ctx.rotate(tw.ang);
-  if (tw.type === 'harpoon') {
+  if (tw.type === 'tesla') {
+    ctx.rotate(-tw.ang);
+    ctx.fillStyle = '#2a2f33'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#c47a3a'; ctx.lineWidth = 2;
+    for (let r = 6.5; r >= 3; r -= 1.75) { ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke(); }
+    ctx.fillStyle = '#d8e6ee'; ctx.beginPath(); ctx.arc(0, 0, 2.6, 0, TAU); ctx.fill();
+    if (Math.random() < 0.35) { ctx.strokeStyle = 'rgba(190,230,255,0.9)'; ctx.lineWidth = 1; ctx.beginPath(); const a = rand(0, TAU); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * 5 + rand(-2, 2), Math.sin(a) * 5 + rand(-2, 2)); ctx.lineTo(Math.cos(a) * 9, Math.sin(a) * 9); ctx.stroke(); }
+  } else if (tw.type === 'harpoon') {
     ctx.fillStyle = '#3b2a1c'; ctx.fillRect(-6, -6, 12, 12);
     ctx.strokeStyle = C.brass; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(2, 0, 9, -1.1, 1.1); ctx.stroke();
     ctx.fillStyle = '#cfd6d8'; ctx.fillRect(-2, -1, 16, 2);
@@ -760,6 +811,17 @@ function render() {
       ctx.fillStyle = '#1d1d1d'; ctx.beginPath(); ctx.arc(x, y - h, 3 + h * 0.06, 0, TAU); ctx.fill();
     } else if (s.k === 'harpoon') {
       ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(s.a || 0); ctx.fillStyle = '#e6eaeb'; ctx.fillRect(-7, -0.8, 12, 1.6); ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(4, -2.5); ctx.lineTo(4, 2.5); ctx.fill(); ctx.restore();
+    } else if (s.k === 'bolt') {
+      const a = s.t / s.max;
+      for (const [w, col] of [[5, `rgba(120,200,255,${0.35 * a})`], [1.8, `rgba(235,248,255,${a})`]]) {
+        ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineJoin = 'round'; ctx.beginPath();
+        for (let i = 0; i < s.pts.length - 1; i++) {
+          const [x0, y0] = s.pts[i], [x1, y1] = s.pts[i + 1], n = 5;
+          if (i === 0) ctx.moveTo(x0, y0);
+          for (let k = 1; k <= n; k++) { const f = k / n, j = k === n ? 0 : rand(-5, 5); ctx.lineTo(lerp(x0, x1, f) + j, lerp(y0, y1, f) + j); }
+        }
+        ctx.stroke();
+      }
     } else { ctx.strokeStyle = C.teal; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(s.x, s.y, 4, 0, TAU); ctx.stroke(); ctx.beginPath(); ctx.moveTo(s.x - 4, s.y); ctx.lineTo(s.x + 4, s.y); ctx.moveTo(s.x, s.y - 4); ctx.lineTo(s.x, s.y + 4); ctx.stroke(); }
   }
   drawHarbor();
@@ -828,10 +890,18 @@ function renderPadSheet() {
   const pad = sel.pad, tw = pad.tw, box = $('buildOpts'); box.innerHTML = '';
   $('buildGold').textContent = fmt(gold) + ' altın';
   const st = $('buildStats'); st.innerHTML = '';
+  if (isLocked(pad)) {
+    $('t-build').textContent = 'Kilitli adacık';
+    st.textContent = 'Taret kurmak için önce adacığı aç.';
+    const c = UNLOCK_COST[Math.min(unlocks, UNLOCK_COST.length - 1)];
+    box.appendChild(opt('⚓', 'Adacığı aç', '', c + ' altın', () => { if (gold < c) return; gold -= c; pad.opened = true; unlocks++; sfx('build'); renderPadSheet(); }, '', gold < c));
+    sel.preview = null;
+    return;
+  }
   if (!tw) {
     $('t-build').textContent = 'Boş adacık';
     st.textContent = 'Bir taret seç. Menzili haritada gösterilir.';
-    for (const k of ['harpoon', 'mortar', 'net']) {
+    for (const k of ['harpoon', 'mortar', 'net', 'tesla']) {
       const D = TT[k], c = D.cost[0];
       box.appendChild(opt(D.ic, D.name, '', c + ' altın', () => { if (gold < c) return; gold -= c; pad.tw = { type: k, lvl: 0, cd: 0, ang: -Math.PI / 2, stun: 0, spent: c }; sfx('build'); closeSheet(); }, '', gold < c, () => { sel.preview = k; sel.previewLvl = 0; }));
     }
@@ -842,6 +912,7 @@ function renderPadSheet() {
     const items = [['Menzil', D.range[L]], ['Hasar', D.dmg[L]], ['Atış/sn', D.rate[L]]];
     if (D.splash) items.push(['Alan', D.splash[L]]);
     if (D.slow) items.push(['Yavaşlatma', '%' + Math.round(D.slow[L] * 100)]);
+    if (D.chain) items.push(['Sekme', D.chain[L]], ['Sekme menzili', D.chainR[L]]);
     for (const [a, b] of items) { const s = document.createElement('span'); s.textContent = a + ' '; const bb = document.createElement('b'); bb.textContent = String(b).replace('.', ','); s.appendChild(bb); st.appendChild(s); }
     sel.preview = null; sel.previewLvl = undefined;
     if (L < D.cost.length - 1) {
@@ -851,6 +922,7 @@ function renderPadSheet() {
       if (D.range[L + 1] !== D.range[L]) nx.push('menzil ' + D.range[L + 1]);
       if (D.multi && D.multi[L + 1] > D.multi[L]) nx.push('3 hedef');
       if (D.slow && D.slow[L + 1] !== D.slow[L]) nx.push('yavaşlatma %' + Math.round(D.slow[L + 1] * 100));
+      if (D.chain && D.chain[L + 1] > D.chain[L]) nx.push(D.chain[L + 1] + ' sekme');
       box.appendChild(opt('↑', 'Seviye ' + (L + 2) + "'ye yükselt", nx.join(', '), c + ' altın', () => { if (gold < c) return; gold -= c; tw.lvl++; tw.spent += c; sfx('build'); renderPadSheet(); }, '', gold < c, () => { sel.previewLvl = L + 1; }));
     } else {
       const s = document.createElement('span'); s.textContent = 'En yüksek seviyede.'; st.appendChild(s);
