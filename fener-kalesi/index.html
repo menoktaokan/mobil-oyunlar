@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Fener Kalesi</title>
+<title>Fener Kalesi 3D Kuleler</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Karla:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -80,6 +80,8 @@ h3{font-size:22px}
 [hidden]{display:none!important}
 #muteBtn[aria-pressed="false"],#muteBtn2[aria-pressed="false"]{text-decoration:line-through;text-decoration-thickness:2px}
 </style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 <div id="stage">
@@ -89,7 +91,7 @@ h3{font-size:22px}
     <button id="pauseBtn" class="tb" aria-label="Duraklat" hidden></button>
 
     <section id="menu" class="sheet full" aria-labelledby="t-menu">
-      <p class="tag">Kıyı savunması</p>
+      <p class="tag">Kıyı savunması · 3D kuleler</p>
       <h1 id="t-menu">FENER<br><span>KALESİ</span></h1>
       <p class="lede">Korsan filosu kanaldan limana süzülüyor. Adacıklara taret kur, fenerin topunu kendin ateşle.</p>
       <div class="row">
@@ -180,6 +182,7 @@ function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   cv.width = Math.round(ww * DPR); cv.height = Math.round(sh * DPR);
   cv.style.width = ww + 'px'; cv.style.height = sh + 'px';
+  if (initT3()) sizeT3(cv.width, cv.height, W, H);
   buildMap();
 }
 function buildMap() {
@@ -239,6 +242,99 @@ function posAt(s) {
   return { x: lerp(a.x, b.x, t), y: lerp(a.y, b.y, t), a: Math.atan2(b.y - a.y, b.x - a.x) };
 }
 
+/* ---------- 3D tower models (Three.js) ---------- */
+// orthographic camera tilted back from straight-down; ground point (x, y) of the 2D map lands on screen (x, y)
+const TILT3 = 0.62, COS3 = Math.cos(TILT3), SIN3 = Math.sin(TILT3), MS3 = 1.3;
+let T3 = null;
+function initT3() {
+  if (T3 || typeof THREE === 'undefined') return T3;
+  try {
+    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+    renderer.setClearColor(0x000000, 0);
+    renderer.setPixelRatio(1);
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(0, 360, 0, -640, -3000, 3000);
+    camera.position.set(0, 1000 * COS3, 1000 * SIN3); camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.42));
+    scene.add(new THREE.HemisphereLight(0xd8ecff, 0x0c2430, 0.45));
+    const sun = new THREE.DirectionalLight(0xfff0d6, 0.95); sun.position.set(-220, 420, 260); scene.add(sun);
+    T3 = { renderer, scene, camera, groups: new Map(), mats: {} };
+  } catch (e) { T3 = null; }
+  return T3;
+}
+function sizeT3(pxW, pxH, w, h) {
+  if (!T3) return;
+  T3.renderer.setSize(pxW, pxH, false);
+  const c = T3.camera; c.left = 0; c.right = w; c.top = 0; c.bottom = -h; c.updateProjectionMatrix();
+}
+function mat(col, o) {
+  const key = col + JSON.stringify(o || {});
+  if (!T3.mats[key]) T3.mats[key] = new THREE.MeshStandardMaterial(Object.assign({ color: col, roughness: 0.72, metalness: 0.05, flatShading: true }, o || {}));
+  return T3.mats[key];
+}
+function mesh(geo, m, x, y, z) { const o = new THREE.Mesh(geo, m); o.position.set(x || 0, y || 0, z || 0); return o; }
+function towerHeight3(type, lvl) { return ({ harpoon: 12, mortar: 8, net: 22, tesla: 20 })[type] * (1 + lvl * 0.08); }
+function buildTower3(type, lvl) {
+  const g = new THREE.Group(), head = new THREE.Group(), h = towerHeight3(type, lvl);
+  const wood = mat(0x7a5432), dark = mat(0x3b2a1c), brass = mat(0xe3b04b, { metalness: 0.55, roughness: 0.4 }), steel = mat(0xcfd6d8, { metalness: 0.6, roughness: 0.35 });
+  if (type === 'harpoon') {
+    g.add(mesh(new THREE.CylinderGeometry(5.2, 6.4, h, 8), wood, 0, h / 2, 0));
+    for (const k of [0.3, 0.72]) { const r = mesh(new THREE.TorusGeometry(5.9, 0.7, 4, 12), brass, 0, h * k, 0); r.rotation.x = Math.PI / 2; g.add(r); }
+    head.position.y = h;
+    head.add(mesh(new THREE.BoxGeometry(10, 4, 10), dark, 0, 2, 0));
+    const bowHold = new THREE.Group(); bowHold.position.set(2, 4.5, 0);
+    const bow = mesh(new THREE.TorusGeometry(9, 0.9, 4, 14, 2.3), brass); bow.rotation.z = -1.15; bowHold.add(bow); bowHold.rotation.x = Math.PI / 2; head.add(bowHold);
+    const shaft = mesh(new THREE.CylinderGeometry(0.8, 0.8, 18, 6), steel, 6, 4.5, 0); shaft.rotation.z = Math.PI / 2; head.add(shaft);
+    const tip = mesh(new THREE.ConeGeometry(2, 5, 6), steel, 16.5, 4.5, 0); tip.rotation.z = -Math.PI / 2; head.add(tip);
+  } else if (type === 'mortar') {
+    g.add(mesh(new THREE.CylinderGeometry(9, 10.5, h, 8), mat(0x6d7378), 0, h / 2, 0));
+    const rim = mesh(new THREE.TorusGeometry(9.2, 1, 4, 16), mat(0x565c61), 0, h, 0); rim.rotation.x = Math.PI / 2; g.add(rim);
+    head.position.y = h;
+    head.add(mesh(new THREE.BoxGeometry(9, 3, 7), mat(0x4a5156), 0, 1.5, 0));
+    const tube = new THREE.Group(); tube.position.set(1, 5, 0); tube.rotation.z = -0.75;
+    tube.add(mesh(new THREE.CylinderGeometry(3.6, 4.4, 11, 10), mat(0x3a4045, { metalness: 0.45, roughness: 0.45 }), 0, 3, 0));
+    tube.add(mesh(new THREE.CylinderGeometry(2.6, 2.6, 0.6, 10), mat(0x0d0f10), 0, 8.6, 0));
+    head.add(tube);
+  } else if (type === 'net') {
+    g.add(mesh(new THREE.CylinderGeometry(4.5, 5.2, 4, 8), mat(0x5d3b20), 0, 2, 0));
+    g.add(mesh(new THREE.CylinderGeometry(1.2, 1.5, h, 6), wood, 0, h / 2, 0));
+    head.position.y = h;
+    head.add(mesh(new THREE.BoxGeometry(20, 1.6, 1.8), mat(0x5d3b20), 2, 0, 0));
+    const net = mesh(new THREE.ConeGeometry(6, 11, 10, 3, true), new THREE.MeshBasicMaterial({ color: 0x7fd6c9, wireframe: true, transparent: true, opacity: 0.85 }), 9, -5.5, 0);
+    net.rotation.z = Math.PI; head.add(net);
+  } else {
+    g.add(mesh(new THREE.CylinderGeometry(7, 8, 4, 10), mat(0x2a2f33), 0, 2, 0));
+    g.add(mesh(new THREE.CylinderGeometry(2.4, 2.7, h - 6, 8), mat(0xb7773d, { metalness: 0.5, roughness: 0.45 }), 0, 4 + (h - 6) / 2, 0));
+    for (let y = 7; y < h - 3; y += 2.6) { const c = mesh(new THREE.TorusGeometry(4.2, 0.85, 5, 14), mat(0xd08a46, { metalness: 0.6, roughness: 0.35 }), 0, y, 0); c.rotation.x = Math.PI / 2; g.add(c); }
+    const orb = mesh(new THREE.SphereGeometry(4.6, 12, 10), new THREE.MeshStandardMaterial({ color: 0xdfeaf2, metalness: 0.7, roughness: 0.22, emissive: 0x6fb8ff, emissiveIntensity: 0.35 }), 0, h + 1, 0);
+    g.add(orb); g.userData.orb = orb;
+  }
+  g.add(head);
+  g.userData.head = head; g.userData.h = h;
+  return g;
+}
+function syncTowers3(pads, now) {
+  const seen = new Set();
+  for (const p of pads) {
+    const tw = p.tw; if (!tw) continue;
+    const key = tw.type + ':' + tw.lvl;
+    let g = T3.groups.get(p);
+    if (!g || g.userData.key !== key) {
+      if (g) T3.scene.remove(g);
+      g = buildTower3(tw.type, tw.lvl); g.userData.key = key; T3.groups.set(p, g); T3.scene.add(g);
+    }
+    g.position.set(p.x, 0, p.y / COS3); g.scale.setScalar(MS3);
+    const a = tw.ang;
+    g.userData.head.rotation.y = -Math.atan2(Math.sin(a) / COS3, Math.cos(a));
+    if (tw.stun > 0) g.userData.head.rotation.z = Math.sin(now * 20) * 0.15; else g.userData.head.rotation.z = 0;
+    if (g.userData.orb) g.userData.orb.material.emissiveIntensity = 0.3 + Math.random() * 0.25;
+    seen.add(p);
+  }
+  for (const [p, g] of T3.groups) if (!seen.has(p)) { T3.scene.remove(g); T3.groups.delete(p); }
+}
+// screen offset (upwards) of a point at height h above the ground
+const lift3 = h => h * SIN3 * MS3;
+
 /* ---------- audio ---------- */
 let AC = null, master = null, nbuf = null, muted = false;
 function audioInit() {
@@ -291,8 +387,8 @@ function sfx(n) {
 
 /* ---------- storage ---------- */
 let best = null;
-try { best = JSON.parse(localStorage.getItem('fener_best') || 'null'); } catch (e) { best = null; }
-try { muted = localStorage.getItem('fener_mute') === '1'; } catch (e) {}
+try { best = JSON.parse(localStorage.getItem('fener3k_best') || 'null'); } catch (e) { best = null; }
+try { muted = localStorage.getItem('fener3k_mute') === '1'; } catch (e) {}
 
 /* ---------- definitions ---------- */
 const TT = {
@@ -437,26 +533,26 @@ function updTowers(dt) {
     }
     if (tw.cd > 0 || !tgt) continue;
     tw.cd = 1 / D.rate[L];
-    if (tw.type === 'tesla') { zap(p, tgt, D, L); }
-    else if (tw.type === 'harpoon') { shots.push({ k: 'harpoon', x: p.x, y: p.y, tgt, dmg: D.dmg[L], sp: 380 }); sfx('harpoon'); }
+    if (tw.type === 'tesla') { zap(p, tgt, D, L, T3 ? lift3(towerHeight3('tesla', L) + 1) : 12); }
+    else if (tw.type === 'harpoon') { shots.push({ k: 'harpoon', x: p.x, y: p.y - (T3 ? lift3(towerHeight3(tw.type, L) + 4) : 0), tgt, dmg: D.dmg[L], sp: 380 }); sfx('harpoon'); }
     else if (tw.type === 'mortar') {
       const lead = posAt(tgt.s + ETY[tgt.t].sp * (1 - tgt.slow) * 0.85 * 0.6);
-      shots.push({ k: 'mortar', sx: p.x, sy: p.y, tx: lead.x, ty: lead.y, t: 0, T: 0.85, dmg: D.dmg[L], R: D.splash[L] });
+      shots.push({ k: 'mortar', sx: p.x, sy: p.y - (T3 ? lift3(towerHeight3(tw.type, L) + 10) : 0), tx: lead.x, ty: lead.y, t: 0, T: 0.85, dmg: D.dmg[L], R: D.splash[L] });
       sfx('mortar');
     } else {
       const used = new Set();
       for (let i = 0; i < D.multi[L]; i++) {
         const t = i === 0 ? tgt : targetFor(p, D.range[L], used);
         if (!t) break; used.add(t);
-        shots.push({ k: 'net', x: p.x, y: p.y, tgt: t, dmg: D.dmg[L], sp: 260, slow: D.slow[L], dur: D.dur[L] });
+        shots.push({ k: 'net', x: p.x, y: p.y - (T3 ? lift3(towerHeight3(tw.type, L)) : 0), tgt: t, dmg: D.dmg[L], sp: 260, slow: D.slow[L], dur: D.dur[L] });
       }
       sfx('net');
     }
   }
 }
-function zap(p, first, D, L) {
+function zap(p, first, D, L, top) {
   // one bolt that jumps from ship to ship, each jump a little weaker
-  const pts = [[p.x, p.y - 12]], hit = new Set();
+  const pts = [[p.x, p.y - (top || 12)]], hit = new Set();
   let cur = first, dmg = D.dmg[L];
   for (let k = 0; cur && k <= D.chain[L]; k++) {
     hit.add(cur); pts.push([cur.x, cur.y]);
@@ -642,6 +738,12 @@ function drawPad(p, i) {
     ctx.fillStyle = 'rgba(238,246,242,0.75)'; ctx.fillRect(p.x - 4, p.y - 0.75, 8, 1.5); ctx.fillRect(p.x - 0.75, p.y - 4, 1.5, 8);
     return;
   }
+  if (T3) {
+    const h = towerHeight3(tw.type, tw.lvl);
+    ctx.fillStyle = 'rgba(8,24,30,0.35)'; ctx.beginPath(); ctx.ellipse(p.x + h * 0.45, p.y + 3 + h * 0.12, 7 + h * 0.3, 4, 0.35, 0, TAU); ctx.fill();
+    for (let l = 0; l <= tw.lvl; l++) { ctx.fillStyle = C.brass; ctx.fillRect(p.x - 12 + l * 5, p.y + 15, 4, 3); }
+    return;
+  }
   ctx.save(); ctx.translate(p.x, p.y);
   if (tw.stun > 0) ctx.globalAlpha = 0.55;
   ctx.rotate(tw.ang);
@@ -803,6 +905,12 @@ function render() {
   }
   PADS.forEach(drawPad);
   for (const e of ens) drawEnemy(e);
+  if (T3) {
+    syncTowers3(PADS.filter(p => !isLocked(p)), clock);
+    T3.renderer.render(T3.scene, T3.camera);
+    ctx.drawImage(T3.renderer.domElement, 0, 0, W, H);
+    for (const p of PADS) if (p.tw && p.tw.stun > 0) { ctx.fillStyle = C.foam; ctx.font = '500 9px "DM Mono", monospace'; ctx.textAlign = 'center'; ctx.fillText('SERSEM', p.x, p.y - lift3(towerHeight3(p.tw.type, p.tw.lvl)) - 12); }
+  }
   // shots
   for (const s of shots) {
     if (s.k === 'mortar') {
@@ -967,7 +1075,7 @@ function endGame() {
   $('eKills').textContent = fmt(kills);
   $('eHits').textContent = fmt(ballHits);
   const isNew = waveN > bestWave();
-  if (isNew) { best = { wave: waveN }; try { localStorage.setItem('fener_best', JSON.stringify(best)); } catch (e) {} }
+  if (isNew) { best = { wave: waveN }; try { localStorage.setItem('fener3k_best', JSON.stringify(best)); } catch (e) {} }
   $('endNote').textContent = isNew ? 'Yeni rekor.' : '';
   setBestOut();
   sfx('lose');
@@ -993,7 +1101,7 @@ $('resumeBtn').addEventListener('click', resumeGame);
 $('pauseBtn').addEventListener('click', pauseGame);
 $('buildClose').addEventListener('click', closeSheet);
 $('speedBtn').addEventListener('click', () => { speed = speed === 1 ? 2 : 1; $('speedBtn').setAttribute('aria-pressed', String(speed === 2)); });
-for (const id of ['muteBtn', 'muteBtn2']) $(id).addEventListener('click', () => { muted = !muted; try { localStorage.setItem('fener_mute', muted ? '1' : '0'); } catch (e) {} setMuteUI(); if (!muted) { audioInit(); sfx('bell'); } });
+for (const id of ['muteBtn', 'muteBtn2']) $(id).addEventListener('click', () => { muted = !muted; try { localStorage.setItem('fener3k_mute', muted ? '1' : '0'); } catch (e) {} setMuteUI(); if (!muted) { audioInit(); sfx('bell'); } });
 
 /* ---------- loop ---------- */
 let last = performance.now();

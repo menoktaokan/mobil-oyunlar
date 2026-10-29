@@ -9,7 +9,7 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 | Hurda Arena | Arena tank savaşı | [`hurda-arena/`](hurda-arena/) |
 | Yörünge Avcısı | Uzay nişancısı | [`yorunge-avcisi/`](yorunge-avcisi/) |
 | Menzil 600 | Keskin nişancı | [`menzil-600/`](menzil-600/) |
-| Fener Kalesi | Kule savunması | [`fener-kalesi/`](fener-kalesi/) |
+| Fener Kalesi 3D | Kule savunması, 3d kuleler | [`fener-kalesi/`](fener-kalesi/) |
 | Otoban 84 | Retro trafik yarışı | [`otoban-84/`](otoban-84/) |
 | Çini Kırma | Tuğla kırma | [`cini-kirma/`](cini-kirma/) |
 | Akide Patlat | Balon patlatma | [`akide-patlat/`](akide-patlat/) |
@@ -19,7 +19,6 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 | Sazlık Avı | Ördek avı | [`sazlik-avi/`](sazlik-avi/) |
 | Hurda Arena Seviyeli | Arena tank savaşı, Kolay / Orta / Zor | [`hurda-arena-seviyeli/`](hurda-arena-seviyeli/) |
 | Mahalle Kedisi | Labirent kaçışı | [`mahalle-kedisi/`](mahalle-kedisi/) |
-| Fener Kalesi 3D Kuleler | Kule savunması, 3d model kuleler | [`fener-kalesi-3dk/`](fener-kalesi-3dk/) |
 
 ## Oynamak
 
