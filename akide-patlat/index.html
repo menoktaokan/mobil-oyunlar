@@ -133,6 +133,7 @@ h2{font-size:32px}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -145,7 +146,8 @@ const fmt = n => Math.round(n).toLocaleString('tr-TR');
 /* ---------- layout ---------- */
 const W = 360, COLS = 11, R = W / (COLS * 2), RH = R * Math.sqrt(3), HUD = 36;
 let H = 640, S = 1, DPR = 1, GH = 512, PH = 128, SHY = 470, DANGER = 420, bg = null;
-const stage = $('stage'), wrap = $('wrap'), cv = $('cv'), ctx = cv.getContext('2d');
+const stage = $('stage'), wrap = $('wrap'), cv = $('cv');
+let ctx = cv.getContext('2d');
 function resize() {
   const sw = stage.clientWidth, sh = stage.clientHeight;
   const ww = Math.min(sw, Math.round(sh * 0.6));
@@ -154,6 +156,7 @@ function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   cv.width = Math.round(ww * DPR); cv.height = Math.round(sh * DPR);
   cv.style.width = ww + 'px'; cv.style.height = sh + 'px';
+  if (initT3()) sizeT3();
   PH = 0; GH = H;
   SHY = GH - 48; DANGER = SHY - R * 2 - 8;
   buildBg();
@@ -498,6 +501,7 @@ function shotSprite(b) { return b.k === 'c' ? SPR[b.c] : SPR[b.k]; }
 function setSp(v) { if ('letterSpacing' in ctx) ctx.letterSpacing = v; }
 function txt(t, x, y, font, col, align, sp) { ctx.font = font; ctx.fillStyle = col; ctx.textAlign = align || 'left'; ctx.textBaseline = 'alphabetic'; setSp(sp || '0px'); ctx.fillText(t, x, y); setSp('0px'); }
 function render() {
+  if (K3) { render3(); return; }
   ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
   ctx.drawImage(bg, 0, 0, W, GH);
   // shelf (ceiling) with drop counter
@@ -540,6 +544,153 @@ function render() {
   for (const f of floats) { ctx.globalAlpha = clamp(1.1 - f.t, 0, 1); txt(f.text, f.x, f.y, '700 15px Fredoka, sans-serif', '#4a2a3a', 'center'); }
   ctx.globalAlpha = 1;
   // HUD
+  ctx.fillStyle = '#fff4ea'; ctx.fillRect(0, 0, W, HUD);
+  ctx.fillStyle = '#ff5f8f'; ctx.fillRect(0, HUD - 3, W, 3);
+  txt(fmt(score), 12, 25, '700 20px Fredoka, sans-serif', '#4a2a3a');
+  txt('Kavanoz ' + (lvl + 1), W / 2, 24, '600 15px Fredoka, sans-serif', '#ff5f8f', 'center');
+  txt(shots + ' atış', W - 48, 24, '500 11px Lexend, sans-serif', '#9a7d8a', 'right');
+}
+
+/* ---------- 3D ---------- */
+/* ---------- 3D candies (Three.js) ---------- */
+// Three layers: the jar (2D) at the back, glossy 3D candies and the cannon in the middle, aim dots and HUD (2D) on top.
+// The camera is tilted back from straight down; each candy rests on the jar wall and is placed so its centre
+// lands exactly where the 2D grid puts it, so aiming, snapping and collisions are unchanged.
+const TILT = 0.62, COSV = Math.cos(TILT), SINV = Math.sin(TILT), CAPN = 420;
+let K3 = null, ctxT = ctx, ctxB = null;
+const zAt = (y, h) => (y + h * SINV) / COSV;     // world z of a point at height h that should show at screen y
+const yawOf = a => -Math.atan2(Math.sin(a) / COSV, Math.cos(a));
+function initT3() {
+  if (K3 !== null) return K3;
+  K3 = false;
+  if (typeof THREE === 'undefined') return K3;
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0); renderer.setPixelRatio(1);
+    const cb = document.createElement('canvas'), el = renderer.domElement;
+    for (const c of [cb, el]) { c.style.position = 'absolute'; c.style.left = '0'; c.style.top = '0'; c.style.pointerEvents = 'none'; wrap.insertBefore(c, cv); }
+    cv.style.position = 'relative'; cv.style.zIndex = '1';
+    ctxB = cb.getContext('2d');
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(0, W, 0, -640, -4000, 4000);
+    camera.position.set(0, 1000 * COSV, 1000 * SINV); camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0);
+    scene.add(new THREE.AmbientLight(0xfff4ea, 0.62));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xffd8c8, 0.35));
+    const key = new THREE.DirectionalLight(0xffffff, 0.75); key.position.set(-260, 520, 420); scene.add(key);
+    K3 = { renderer, scene, camera, cb };
+    buildCandies3D();
+  } catch (e) { K3 = false; }
+  return K3;
+}
+function sizeT3() {
+  if (!K3) return;
+  K3.renderer.setSize(cv.width, cv.height, false);
+  K3.cb.width = cv.width; K3.cb.height = cv.height;
+  for (const c of [K3.cb, K3.renderer.domElement]) { c.style.width = cv.style.width; c.style.height = cv.style.height; }
+  const c = K3.camera; c.left = 0; c.right = W; c.top = 0; c.bottom = -H; c.updateProjectionMatrix();
+}
+function candyTex(base, dark, kind) {
+  const c = document.createElement('canvas'); c.width = 128; c.height = 64; const g = c.getContext('2d');
+  if (kind === 'rainbow') {
+    const cols = COLS6.map(k => k.base);
+    for (let i = 0; i < 16; i++) { g.fillStyle = cols[i % cols.length]; g.fillRect(i * 8, 0, 8, 64); }
+  } else {
+    const gr = g.createLinearGradient(0, 0, 0, 64); gr.addColorStop(0, base); gr.addColorStop(1, dark);
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 64);
+  }
+  if (kind === 'candy' || kind === 'rainbow') {
+    // twisted akide stripes: diagonal bands that wrap around the ball
+    g.fillStyle = 'rgba(255,255,255,0.62)';
+    for (let i = -64; i < 160; i += 21) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 7, 0); g.lineTo(i + 7 + 40, 64); g.lineTo(i + 40, 64); g.closePath(); g.fill(); }
+  }
+  if (kind === 'stone') {
+    for (let i = 0; i < 60; i++) { g.fillStyle = `rgba(0,0,0,${0.05 + Math.random() * 0.12})`; g.beginPath(); g.arc(Math.random() * 128, Math.random() * 64, 1 + Math.random() * 2.5, 0, TAU); g.fill(); }
+  }
+  if (kind === 'bomb') {
+    g.fillStyle = '#ff5f8f'; g.font = '700 40px Fredoka, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('✸', 32, 34); g.fillText('✸', 96, 34);
+  }
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+}
+function buildCandies3D() {
+  const sph = new THREE.SphereGeometry(1, 28, 18), rock = new THREE.IcosahedronGeometry(1, 1);
+  const glossy = (map, o) => new THREE.MeshPhysicalMaterial(Object.assign({ map, roughness: 0.22, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.12 }, o || {}));
+  K3.kinds = {};
+  COLS6.forEach((c, i) => { K3.kinds[i] = new THREE.InstancedMesh(sph, glossy(candyTex(c.base, c.dark, 'candy')), CAPN); });
+  K3.kinds.S = new THREE.InstancedMesh(rock, new THREE.MeshStandardMaterial({ map: candyTex('#c4bcb0', '#8a8174', 'stone'), roughness: 0.95, flatShading: true }), CAPN);
+  K3.kinds.R = new THREE.InstancedMesh(sph, glossy(candyTex('', '', 'rainbow')), CAPN);
+  K3.kinds.B = new THREE.InstancedMesh(sph, glossy(candyTex('#5a4a52', '#1d1217', 'bomb'), { roughness: 0.35 }), CAPN);
+  for (const k in K3.kinds) { const m = K3.kinds[k]; m.count = 0; m.frustumCulled = false; K3.scene.add(m); }
+  K3.shadow = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 18), new THREE.MeshBasicMaterial({ color: 0x4a2a3a, transparent: true, opacity: 0.16, depthWrite: false }), CAPN * 2);
+  K3.shadow.count = 0; K3.shadow.frustumCulled = false; K3.shadow.renderOrder = -1; K3.scene.add(K3.shadow);
+  // wooden candy cannon
+  const g = new THREE.Group(), wood = new THREE.MeshStandardMaterial({ color: 0x8a5a3b, roughness: 0.7, flatShading: true });
+  const darkWood = new THREE.MeshStandardMaterial({ color: 0x6e4529, roughness: 0.75, flatShading: true });
+  const brass = new THREE.MeshStandardMaterial({ color: 0xe3b04b, roughness: 0.35, metalness: 0.6 });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(26, 30, 12, 24), wood); base.position.y = 6; g.add(base);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(26, 2.2, 8, 28), brass); rim.rotation.x = Math.PI / 2; rim.position.y = 12; g.add(rim);
+  const barrel = new THREE.Group(); barrel.position.y = 14;
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(7, 9, 36, 16), darkWood); tube.rotation.z = -Math.PI / 2; tube.position.x = 22; barrel.add(tube);
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(7.5, 2, 8, 18), brass); lip.rotation.y = Math.PI / 2; lip.position.x = 40; barrel.add(lip);
+  g.add(barrel);
+  K3.scene.add(g); K3.cannon = g; K3.barrel = barrel;
+}
+function hash2(a, b) { const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return s - Math.floor(s); }
+function sync3D() {
+  const mx = new THREE.Matrix4(), q = new THREE.Quaternion(), e3 = new THREE.Euler(), sc = new THREE.Vector3(), pos = new THREE.Vector3();
+  const n = {}; for (const k in K3.kinds) n[k] = 0;
+  let ns = 0;
+  const put = (v, x, y, r, rx, ry) => {
+    const k = typeof v === 'number' ? v : v; const im = K3.kinds[k]; if (!im || n[k] >= CAPN || r <= 0.01) return;
+    e3.set(rx, ry, 0.4); q.setFromEuler(e3); sc.set(r, r, r); pos.set(x, r, zAt(y, r));
+    mx.compose(pos, q, sc); im.setMatrixAt(n[k]++, mx);
+    if (ns < CAPN * 2) { e3.set(-Math.PI / 2, 0, 0); q.setFromEuler(e3); sc.set(r * 0.95, r * 0.8, 1); pos.set(x + r * 0.25, 0.2, zAt(y, r) + r * 0.25); mx.compose(pos, q, sc); K3.shadow.setMatrixAt(ns++, mx); }
+  };
+  const shotKind = b => b.k === 'c' ? b.c : b.k === 'rainbow' ? 'R' : 'B';
+  // grid
+  for (let r = 0; r < grid.length; r++) for (let c = 0; c < grid[r].length; c++) {
+    const v = grid[r][c]; if (v === null) continue;
+    const p = cellXY(r, c); put(v, p.x, p.y, R * 0.97, hash2(r, c) * 6, hash2(c, r) * 6);
+  }
+  for (const p of popping) { const k = p.t < 0 ? 1 : Math.max(0, (1 + p.t * 3) * (1 - p.t * 4)); put(p.v, p.x, p.y, R * 0.97 * k, p.x * 0.1, p.y * 0.1); }
+  for (const f of falling) put(f.v, f.x, f.y, R * 0.97, f.y * 0.05, f.x * 0.05);
+  // shooter
+  K3.cannon.position.set(W / 2, 0, zAt(SHY + 6, 0));
+  K3.barrel.rotation.y = yawOf(aim);
+  if (cur) put(shotKind(cur), W / 2, SHY, R * 0.97, 0.3, clock * 0.6);
+  if (fly) put(shotKind(fly.b), fly.x, fly.y, R * 0.97, clock * 9, clock * 7);
+  if (nxt) put(shotKind(nxt), W / 2 + 62, SHY + 8, R * 0.7, 0.3, -clock * 0.6);
+  for (const k in K3.kinds) { const im = K3.kinds[k]; im.count = n[k]; im.instanceMatrix.needsUpdate = true; }
+  K3.shadow.count = ns; K3.shadow.instanceMatrix.needsUpdate = true;
+}
+function render3() {
+  // back: the jar
+  ctx = ctxB;
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
+  ctx.drawImage(bg, 0, 0, W, GH);
+  const sy = top - 6 + (shelfAnim > 0 ? Math.sin(shelfAnim * 30) * 2 : 0);
+  ctx.fillStyle = '#c98c5f'; ctx.fillRect(0, HUD, W, sy - HUD + 6);
+  ctx.fillStyle = '#a86d44'; ctx.fillRect(0, sy, W, 6);
+  if (LV) for (let i = 0; i < LV.perDrop; i++) { ctx.fillStyle = i < LV.perDrop - sinceDrop ? '#fff4ea' : 'rgba(255,244,234,0.3)'; ctx.beginPath(); ctx.arc(W / 2 - (LV.perDrop - 1) * 7 + i * 14, sy + 3, 3, 0, TAU); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(255,95,143,0.55)'; ctx.lineWidth = 2; ctx.setLineDash([8, 6]);
+  ctx.beginPath(); ctx.moveTo(0, DANGER); ctx.lineTo(W, DANGER); ctx.stroke(); ctx.setLineDash([]);
+  // middle: candies and the cannon
+  sync3D(); K3.renderer.render(K3.scene, K3.camera);
+  // front: aim guide, sparks, labels and HUD
+  ctx = ctxT;
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0); ctx.clearRect(0, 0, W, H);
+  for (const p of parts) { ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.fillStyle = p.col; ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3); }
+  ctx.globalAlpha = 1;
+  if (state === 'play' && !fly && endT <= 0 && cur && (aiming || aimDir || kbAimT > 0)) {
+    const tr = traceAim();
+    const col = cur.k === 'c' ? COLS6[cur.c].base : '#4a2a3a';
+    tr.pts.forEach(([x, y], i) => { ctx.globalAlpha = Math.max(0.15, 0.85 - i * 0.012); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 2.6, 0, TAU); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    if (tr.cell) { const p = cellXY(tr.cell[0], tr.cell[1]); ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.arc(p.x, p.y, R - 2, 0, TAU); ctx.stroke(); ctx.setLineDash([]); }
+  }
+  if (nxt) txt('sıradaki', W / 2 + 62, SHY + 8 + R + 4, '500 9px Lexend, sans-serif', '#9a7d8a', 'center');
+  for (const f of floats) { ctx.globalAlpha = clamp(1.1 - f.t, 0, 1); txt(f.text, f.x, f.y, '700 15px Fredoka, sans-serif', '#4a2a3a', 'center'); }
+  ctx.globalAlpha = 1;
   ctx.fillStyle = '#fff4ea'; ctx.fillRect(0, 0, W, HUD);
   ctx.fillStyle = '#ff5f8f'; ctx.fillRect(0, HUD - 3, W, 3);
   txt(fmt(score), 12, 25, '700 20px Fredoka, sans-serif', '#4a2a3a');

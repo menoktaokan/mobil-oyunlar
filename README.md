@@ -12,7 +12,7 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 | Fener Kalesi 3D | Kule savunması, 3d kuleler | [`fener-kalesi/`](fener-kalesi/) |
 | Otoban 84 | Retro trafik yarışı | [`otoban-84/`](otoban-84/) |
 | Çini Kırma | Tuğla kırma | [`cini-kirma/`](cini-kirma/) |
-| Akide Patlat | Balon patlatma | [`akide-patlat/`](akide-patlat/) |
+| Akide Patlat 3D | Balon patlatma | [`akide-patlat/`](akide-patlat/) |
 | Göktaşı | Göktaşı avı | [`goktasi/`](goktasi/) |
 | İniş Penceresi | Ay'a iniş | [`inis-penceresi/`](inis-penceresi/) |
 | Lunapark Pinball | Pinball | [`lunapark-pinball/`](lunapark-pinball/) |
