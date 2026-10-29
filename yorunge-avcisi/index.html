@@ -244,6 +244,7 @@ const SPR = {
   lav: mkGlow(4, '#c9a8ff', 'rgba(180,140,255,0.4)'),
   ember: mkGlow(4, '#ffb84d', 'rgba(255,140,60,0.4)'),
   gold: mkGlow(3, '#ffd36b', 'rgba(255,211,107,0.35)'),
+  mint: mkGlow(3, '#6effc9', 'rgba(110,255,201,0.22)'),
   boom: mkGlow(10, '#ffcf8a', 'rgba(255,120,90,0.25)'),
   core: mkGlow(10, '#ff5d8f', 'rgba(180,60,200,0.3)')
 };
@@ -863,7 +864,7 @@ function update(dt) {
   tickFx(dt);
 }
 function tickFx(dt) {
-  for (const s of stars) { s.y += (14 + s.z * s.z * 90) * dt * (overdrive > 0 ? 1.8 : 1); if (s.y > H) { s.y -= H; s.x = rand(0, W); } }
+  for (const s of stars) { s.y += (14 + s.z * s.z * 90) * dt * (overdrive > 0 ? 1.8 : 1) * (state === 'menu' ? 1 : 0.45); if (s.y > H) { s.y -= H; s.x = rand(0, W); } }
   for (const q of parts) { q.life -= dt; if (q.vx !== undefined) { q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 1 - dt * 2.5; q.vy *= 1 - dt * 2.5; } }
   sweep(parts, q => q.life > 0);
   for (const f of floats) { f.t += dt; f.y -= 28 * dt; }
@@ -969,6 +970,16 @@ function drawBossBody(e, hit) {
   ctx.globalCompositeOperation = 'source-over';
 }
 
+// score crystals: mint diamonds, so they never read as (yellow/pink) enemy shots
+function drawGem2D(g) {
+  const k = g.small ? 0.7 : 1, a = clock * 4 + g.x * 0.1;
+  ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.5; drawSpr(SPR.mint, g.x, g.y, 0.8 * k); ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.save(); ctx.translate(g.x, g.y); ctx.scale(Math.cos(a) * 0.6 + 0.4 * Math.sign(Math.cos(a) || 1), 1);
+  ctx.fillStyle = '#1f8a66'; poly([0, -6 * k, 4 * k, 0, 0, 6 * k, -4 * k, 0]); ctx.fill();
+  ctx.fillStyle = '#6effc9'; poly([0, -6 * k, 4 * k, 0, 0, 1 * k]); ctx.fill();
+  ctx.restore();
+}
 function drawItem(it) {
   const m = ITEM[it.type];
   ctx.save(); ctx.translate(it.x, it.y);
@@ -1073,6 +1084,7 @@ function render() {
     ctx.drawImage(nebula, 0, off - H, W, H); ctx.drawImage(nebula, 0, off, W, H);
   }
   for (const s of stars) {
+    if (state !== 'menu') { ctx.fillStyle = `rgba(160,165,205,${0.08 + s.z * 0.26})`; const z = 0.5 + s.z * 0.7; ctx.fillRect(s.x, s.y, z, z * (overdrive > 0 ? 3 : 1)); continue; }
     const b = 0.25 + s.z * 0.75;
     ctx.fillStyle = s.z > 0.85 ? `rgba(200,240,255,${b})` : `rgba(190,180,240,${b * 0.8})`;
     const sz = 0.6 + s.z * 1.4;
@@ -1084,7 +1096,7 @@ function render() {
 
   if (state !== 'menu') {
     ctx.globalCompositeOperation = 'lighter';
-    for (const g of gems) drawSpr(SPR.gold, g.x, g.y, g.small ? 0.7 : 1);
+    for (const g of gems) drawGem2D(g);
     ctx.globalCompositeOperation = 'source-over';
     for (const it of items) drawItem(it);
     for (const e of ens) drawEnemy(e);
@@ -1173,6 +1185,8 @@ function initT3() {
     G.cyl8 = new THREE.CylinderGeometry(1, 1, 1, 8); G.cyl6 = new THREE.CylinderGeometry(1, 1, 1, 6); G.torus = new THREE.TorusGeometry(1, 0.06, 6, 40);
     G.arc = new THREE.TorusGeometry(1, 0.05, 4, 10, 0.6);
     K3.ship = buildShip(); scene.add(K3.ship);
+    K3.gems = new THREE.InstancedMesh(G.oct, mat(0x6effc9, { emissive: 0x1f8a66, emissiveIntensity: 0.9, roughness: 0.2, metalness: 0.4 }), 600);
+    K3.gems.count = 0; K3.gems.frustumCulled = false; scene.add(K3.gems);
   } catch (e) { K3 = false; }
   return K3;
 }
@@ -1276,6 +1290,15 @@ function sync3D() {
       case 'boss': b.rotation.set(0.12, 0, Math.sin(e.t * 0.7) * 0.05); U.ringA.rotation.y = -e.t * 0.5; U.ringB.rotation.y = e.t * 0.7; break;
     }
   }
+  const mx = new THREE.Matrix4(), q = new THREE.Quaternion(), e3 = new THREE.Euler(), sc = new THREE.Vector3(), pos = new THREE.Vector3();
+  let n = 0;
+  for (const g of gems) {
+    if (n >= 600) break;
+    const k = g.small ? 3.2 : 4.6;
+    e3.set(0.35, clock * 3 + g.x * 0.07, 0); q.setFromEuler(e3); sc.set(k, k * 1.5, k); pos.set(g.x, 0, g.y / COSV);
+    mx.compose(pos, q, sc); K3.gems.setMatrixAt(n++, mx);
+  }
+  K3.gems.count = n; K3.gems.instanceMatrix.needsUpdate = true;
   K3.active = K3.active.filter(g => {
     if (g.userData.used) return true;
     g.visible = false; (K3.pool[g.userData.type] || (K3.pool[g.userData.type] = [])).push(g);
@@ -1290,11 +1313,12 @@ function render3() {
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   ctx.fillStyle = C.void; ctx.fillRect(0, 0, W, H);
   if (nebula) { const off = (clock * 6) % H; ctx.drawImage(nebula, 0, off - H, W, H); ctx.drawImage(nebula, 0, off, W, H); }
+  // stars stay faint, small and round in play so they never pass for shots
   for (const s of stars) {
-    const b = 0.25 + s.z * 0.75;
-    ctx.fillStyle = s.z > 0.85 ? `rgba(200,240,255,${b})` : `rgba(190,180,240,${b * 0.8})`;
-    const sz = 0.6 + s.z * 1.4;
-    ctx.fillRect(s.x, s.y, sz, sz * (overdrive > 0 ? 4 : 1 + s.z));
+    const b = 0.08 + s.z * 0.26;
+    ctx.fillStyle = `rgba(160,165,205,${b})`;
+    const sz = 0.5 + s.z * 0.7;
+    ctx.fillRect(s.x, s.y, sz, sz * (overdrive > 0 ? 3 : 1));
   }
   // engine flames and the boss core glow sit behind the hulls
   ctx.save(); ctx.translate(sx, sy); ctx.globalCompositeOperation = 'lighter';
@@ -1304,6 +1328,7 @@ function render3() {
     ctx.drawImage(SPR.ice.c, p.x - 7, p.y + 8, 14, 20 * fl);
     if (overdrive > 0) ctx.drawImage(SPR.gold.c, p.x - 10, p.y + 10, 20, 28 * fl);
   }
+  ctx.globalAlpha = 0.45; for (const g of gems) drawSpr(SPR.mint, g.x, g.y, g.small ? 0.6 : 0.85); ctx.globalAlpha = 1;
   for (const e of ens) if (e.type === 'diver' && e.st === 1) { ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(Math.atan2(e.vy, e.vx) - Math.PI / 2); ctx.drawImage(SPR.ember.c, -6, -20, 12, 16); ctx.restore(); }
   ctx.restore();
   // middle: ships
@@ -1315,7 +1340,6 @@ function render3() {
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   ctx.save(); ctx.translate(sx, sy);
   ctx.globalCompositeOperation = 'lighter';
-  for (const g of gems) drawSpr(SPR.gold, g.x, g.y, g.small ? 0.7 : 1);
   if (boss && !boss.dead) { const pulse = 1 + Math.sin(boss.t * 6) * 0.08 + (boss.ph === 3 ? 0.25 : boss.ph === 2 ? 0.12 : 0); drawSpr(SPR.core, boss.x, boss.y - 6, 0.75 * pulse); }
   ctx.globalCompositeOperation = 'source-over';
   for (const it of items) drawItem(it);
