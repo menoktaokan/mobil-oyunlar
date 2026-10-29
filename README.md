@@ -19,9 +19,7 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 | Sazlık Avı | Ördek avı | [`sazlik-avi/`](sazlik-avi/) |
 | Hurda Arena Seviyeli | Arena tank savaşı, Kolay / Orta / Zor | [`hurda-arena-seviyeli/`](hurda-arena-seviyeli/) |
 | Mahalle Kedisi | Labirent kaçışı | [`mahalle-kedisi/`](mahalle-kedisi/) |
-| Fener Kalesi 2.5D | Kule savunması, gölgeli kuleler | [`fener-kalesi-25d/`](fener-kalesi-25d/) |
 | Fener Kalesi 3D Kuleler | Kule savunması, 3d model kuleler | [`fener-kalesi-3dk/`](fener-kalesi-3dk/) |
-| Fener Kalesi 3D | Kule savunması, tamamen 3d sahne | [`fener-kalesi-3d/`](fener-kalesi-3d/) |
 
 ## Oynamak
 
