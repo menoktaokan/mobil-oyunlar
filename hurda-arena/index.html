@@ -81,6 +81,10 @@ h2{font-size:46px}
 .mod .pp i{width:8px;height:4px;background:rgba(236,234,228,.18)}
 .mod .pp i.on{background:var(--hazard)}
 .mods .none{grid-column:1/-1;margin:0;font-size:14px;color:#cfccc4}
+.mod.off{border-style:dashed}
+.mod.off > *{opacity:.4}
+.mod.off .ic{background:rgba(236,234,228,.08);color:var(--muted)}
+.mod:not(.off){border-color:rgba(255,198,26,.55);background:#2a2618}
 .note{margin:0;font-size:14px;color:#cfccc4;line-height:1.4}
 @media (prefers-reduced-motion:reduce){.go{transition:none}}
 
@@ -1896,9 +1900,10 @@ function chooseUpgrade(u) {
 function closeUpgrade() { state = 'play'; showOnly(null); setPlayUI(true); last = performance.now(); const id = runId; setTimeout(() => { if (state === 'play' && runId === id && !wv) startWave(); }, 600); }
 function pauseGame() {
   if (state !== 'play') return; state = 'pause';
-  const own = UPG.filter(u => U[u.id] > 0);
+  // every module is listed from the first wave on: owned ones stand out, the rest stay faded
+  const own = [...UPG].sort((a, b) => (U[b.id] > 0) - (U[a.id] > 0));
   $('pauseMods').innerHTML = own.length
-    ? own.map(u => '<div class="mod" title="' + u.desc + '"><span class="ic">' + u.ic + '</span><span style="min-width:0;overflow:hidden"><span class="mn" style="display:block">' + u.name + '</span><span class="pp">' + Array.from({ length: u.max }, (_, i) => '<i' + (i < U[u.id] ? ' class="on"' : '') + '></i>').join('') + '</span></span></div>').join('')
+    ? own.map(u => '<div class="mod' + (U[u.id] > 0 ? '' : ' off') + '" title="' + u.desc + '"><span class="ic">' + u.ic + '</span><span style="min-width:0;overflow:hidden"><span class="mn" style="display:block">' + u.name + '</span><span class="pp">' + Array.from({ length: u.max }, (_, i) => '<i' + (i < U[u.id] ? ' class="on"' : '') + '></i>').join('') + '</span></span></div>').join('')
     : '<p class="none">Henüz modül yok.</p>';
   showOnly('pause'); setPlayUI(false);
 }
