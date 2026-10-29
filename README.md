@@ -17,7 +17,7 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 | İniş Penceresi | Ay'a iniş | [`inis-penceresi/`](inis-penceresi/) |
 | Lunapark Pinball | Pinball | [`lunapark-pinball/`](lunapark-pinball/) |
 | Sazlık Avı | Ördek avı | [`sazlik-avi/`](sazlik-avi/) |
-| Mahalle Kedisi | Labirent kaçışı | [`mahalle-kedisi/`](mahalle-kedisi/) |
+| Mahalle Kedisi 3D | Labirent kaçışı | [`mahalle-kedisi/`](mahalle-kedisi/) |
 
 ## Oynamak
 
