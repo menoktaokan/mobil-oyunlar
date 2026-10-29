@@ -763,6 +763,22 @@ function updPlayer(dt) {
     P.dx = mx / n; P.dy = my / n;
     P.x += P.dx * SX.speed * l * dt; P.y += P.dy * SX.speed * l * dt;
   }
+  // machines are solid: the tank can neither drive nor dash through them. The solid radius sits a little
+  // inside the contact radius, so touching still counts as a hit when not invulnerable.
+  for (const e of ens) {
+    if (e.type === 'mine' && e.st === 'dash') continue;
+    const ox = P.x - e.x, oy = P.y - e.y, rr = P.r + e.r - 4, d2 = ox * ox + oy * oy;
+    if (d2 >= rr * rr) continue;
+    let nx, ny;
+    if (d2 > 1e-4) { const d = Math.sqrt(d2); nx = ox / d; ny = oy / d; } else { nx = -(P.dashDX || P.dx); ny = -(P.dashDY || P.dy); }
+    P.x = e.x + nx * rr; P.y = e.y + ny * rr;
+    if (P.dashT > 0) {
+      // ramming: the dash stops at the machine and shoves it back
+      const heavy = e.type === 'boss' ? 0.15 : e.type === 'brute' ? 0.45 : 1;
+      e.vx -= nx * 260 * heavy; e.vy -= ny * 260 * heavy; e.flash = 0.07;
+      P.dashT = 0; shake = Math.max(shake, 5); sfx('hit');
+    }
+  }
   pushOut(P, P.r);
   P.tread += Math.hypot(P.x - bx, P.y - by) * 0.4;
 
