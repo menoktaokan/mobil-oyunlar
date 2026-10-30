@@ -104,7 +104,7 @@ h2{font-size:28px}
       <h2 id="t-guide">Nasıl oynanır</h2>
       <ul class="guide-list">
         <li><b>Kontrol</b>Sola ve Sağa tuşları aracı yatırır; bırakınca araç o açıda kalır, düzeltmek sana kalmış. İtiş tuşunu basılı tuttukça ana motor çalışır.</li>
-        <li><b>Güvenli iniş</b>Yeşil pistlerden birine in. Dikey hız 3,5 m/s, yatay hız 2,2 m/s ve eğim 12° altında olmalı; iki ayak da pistin üstünde olmalı.</li>
+        <li><b>Güvenli iniş</b>Yeşil pistlerden birine in. Dikey hız 5 m/s, yatay hız 2,2 m/s ve eğim 12° altında olmalı; iki ayak da pistin üstünde olmalı.</li>
         <li><b>Pistler</b>Pist daraldıkça puan çarpanı artar.</li>
         <li><b>Telemetri</b>Üstte irtifa, hızlar, eğim ve yakıt görünür. Yere yaklaşırken sınırı aşan değer kırmızıya döner.</li>
         <li><b>Yakıt</b>Bütün görevler aynı depodan yakar. Yumuşak iniş biraz yakıt kazandırır. Üç aracın var.</li>
@@ -339,13 +339,13 @@ function contact() {
   const pad = padUnder(minX, maxX);
   const vy = -L.vy, vx = Math.abs(L.vx), ang = Math.abs(L.a) * 180 / Math.PI;
   if (!pad) { crash(ang > 12 ? 'Eğimli zemine yan yattı' : 'Pistin dışına indi'); return; }
-  if (vy > 3.5) { crash('Dikey hız ' + f1(vy) + ' m/s, sınır 3,5'); return; }
+  if (vy > 5) { crash('Dikey hız ' + f1(vy) + ' m/s, sınır 5'); return; }
   if (vx > 2.2) { crash('Yatay hız ' + f1(vx) + ' m/s, sınır 2,2'); return; }
   if (ang > 12) { crash('Eğim ' + Math.round(ang) + '°, sınır 12°'); return; }
   // landed
   L.landed = true; L.y = pad.y + 3.6; L.a = 0;
   const center = 1 - Math.abs((L.x - (pad.x0 + pad.x1) / 2) / ((pad.x1 - pad.x0) / 2));
-  const soft = clamp(1 - vy / 3.5, 0, 1);
+  const soft = clamp(1 - vy / 5, 0, 1);
   const base = 100 * pad.mult, softPts = Math.round(150 * soft * pad.mult), centerPts = Math.round(80 * clamp(center, 0, 1) * pad.mult);
   const fuelBack = Math.round(M.fuelBack * 1.4 * (0.5 + soft * 0.5) / (1 + round * 0.5));
   outcome = { ok: true, pad, vy, vx, ang, base, softPts, centerPts, fuelBack, total: base + softPts + centerPts };
@@ -467,7 +467,7 @@ function drawHUD() {
   ctx.fillStyle = '#0c0e12'; ctx.fillRect(0, 0, W, TOPH);
   const alt = Math.max(0, L.y - 3.6 - groundAt(L.x));
   const vy = -L.vy, vx = L.vx, ang = Math.round(L.a * 180 / Math.PI);
-  const okV = vy <= 3.5, okH = Math.abs(vx) <= 2.2, okA = Math.abs(ang) <= 12;
+  const okV = vy <= 5, okH = Math.abs(vx) <= 2.2, okA = Math.abs(ang) <= 12;
   const gw = (W - 10 - 4 * 4) / 5;
   gauge('İRTİFA', fmt(alt), 'm', 5, 7, gw, '#7dff9b');
   gauge('DİKEY', f1(vy), vy >= 0 ? '↓' : '↑', 5 + (gw + 4), 7, gw, alt < 80 && !okV ? '#ff5a4a' : '#7dff9b');
