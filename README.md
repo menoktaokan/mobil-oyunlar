@@ -8,7 +8,7 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 |---|---|---|
 | Hurda Arena 3D | Arena tank savaşı, Kolay / Orta / Zor | [`hurda-arena/`](hurda-arena/) |
 | Yörünge Avcısı 3D | Uzay nişancısı | [`yorunge-avcisi/`](yorunge-avcisi/) |
-| Menzil 600 | Keskin nişancı | [`menzil-600/`](menzil-600/) |
+| Menzil 600 3D | Keskin nişancı | [`menzil-600/`](menzil-600/) |
 | Fener Kalesi 3D | Kule savunması, 3d kuleler | [`fener-kalesi/`](fener-kalesi/) |
 | Otoban 84 | Retro trafik yarışı | [`otoban-84/`](otoban-84/) |
 | Çini Kırma | Tuğla kırma | [`cini-kirma/`](cini-kirma/) |

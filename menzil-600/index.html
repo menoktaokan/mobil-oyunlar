@@ -171,6 +171,7 @@ h2{font-size:38px}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -192,7 +193,8 @@ const dropMil = d => 0.004 * Math.max(0, d - 100);
 const windMil = (d, w) => 0.0008 * d * w;
 const MILPX = K / 1000;
 
-const stage = $('stage'), wrap = $('wrap'), cv = $('cv'), ctx = cv.getContext('2d');
+const stage = $('stage'), wrap = $('wrap'), cv = $('cv');
+let ctx = cv.getContext('2d');
 let ridge1 = [], ridge2 = [];
 function resize() {
   const sw = stage.clientWidth, sh = stage.clientHeight;
@@ -203,6 +205,7 @@ function resize() {
   cv.width = Math.round(ww * DPR); cv.height = Math.round(sh * DPR);
   cv.style.width = ww + 'px'; cv.style.height = sh + 'px';
   YH = Math.round(H * 0.24);
+  if (initT3()) sizeT3();
   ridge1 = []; ridge2 = [];
   for (let x = -W; x <= W * 2; x += 8) {
     ridge1.push(x, YH - 34 - Math.sin(x * 0.011) * 16 - Math.sin(x * 0.037 + 1) * 7 - Math.sin(x * 0.09) * 2);
@@ -573,7 +576,7 @@ function drawTarget(t) {
   ctx.fillText(String(t.d), gx, gy - 0.22 * s);
   ctx.restore();
 }
-function drawWorld() {
+function drawWorld(backOnly) {
   let g = ctx.createLinearGradient(0, YH - 280, 0, YH);
   g.addColorStop(0, '#8fb0bf'); g.addColorStop(0.7, '#d7d6c6'); g.addColorStop(1, '#ece2cb');
   ctx.fillStyle = g; ctx.fillRect(-W, -H, W * 3, YH + H + 1);
@@ -599,6 +602,7 @@ function drawWorld() {
   g = ctx.createLinearGradient(0, YH - 8, 0, YH + 26);
   g.addColorStop(0, 'rgba(236,226,203,0)'); g.addColorStop(0.35, 'rgba(236,226,203,0.55)'); g.addColorStop(1, 'rgba(236,226,203,0)');
   ctx.fillStyle = g; ctx.fillRect(-W, YH - 8, W * 3, 34);
+  if (backOnly) return;
   // painter's order
   const w = windNow();
   const items = [];
@@ -738,6 +742,7 @@ function drawDeck(alpha) {
 }
 
 function render() {
+  if (K3) { render3(); return; }
   ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
   ctx.globalAlpha = 1;
   const a = effAim();
@@ -763,6 +768,177 @@ function render() {
   if (state === 'menu' || state === 'final') return;
   if (f < 0.5) {
     // overview crosshair
+    ctx.save(); ctx.globalAlpha = 1 - f * 2;
+    ctx.strokeStyle = '#ff6a1f'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.arc(a.x, a.y, 9, 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(a.x - 15, a.y); ctx.lineTo(a.x - 4, a.y); ctx.moveTo(a.x + 4, a.y); ctx.lineTo(a.x + 15, a.y);
+    ctx.moveTo(a.x, a.y - 15); ctx.lineTo(a.x, a.y - 4); ctx.moveTo(a.x, a.y + 4); ctx.lineTo(a.x, a.y + 15); ctx.stroke();
+    ctx.restore();
+  }
+  if (st) drawHUD();
+  drawMsg(f > 0.5 ? geo.cy + geo.R - 54 : gY(100) + 70);
+}
+
+/* ---------- 3D ---------- */
+/* ---------- 3D range (Three.js) ---------- */
+// The 2D game already uses a pinhole camera (eye 5 m up, focal length K px, horizon at YH). The 3D view reuses
+// exactly that camera, so every plate, sign and flag lands on the same pixel the hit maths expects. In the scope
+// the same camera is zoomed about the aim point. Layers: sky and ground (2D) at the back, steel (3D) in the middle,
+// dust, scope mask, rifle deck and HUD (2D) in front.
+let K3 = null, ctxT = ctx, ctxB = null;
+function initT3() {
+  if (K3 !== null) return K3;
+  K3 = false;
+  if (typeof THREE === 'undefined') return K3;
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0); renderer.setPixelRatio(1);
+    const cb = document.createElement('canvas'), el = renderer.domElement;
+    for (const c of [cb, el]) { c.style.position = 'absolute'; c.style.left = '0'; c.style.top = '0'; c.style.pointerEvents = 'none'; wrap.insertBefore(c, cv); }
+    cv.style.position = 'relative'; cv.style.zIndex = '1';
+    ctxB = cb.getContext('2d');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0xe6dcc4, 320, 1100);
+    const camera = new THREE.PerspectiveCamera(30, 1, 1, 3000);
+    camera.position.set(0, CAM, 0); camera.lookAt(0, CAM, -1); camera.updateMatrixWorld();
+    scene.add(new THREE.HemisphereLight(0xeef3f6, 0xb39a68, 0.75));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+    const sun = new THREE.DirectionalLight(0xfff3dc, 0.85); sun.position.set(60, 90, 40); scene.add(sun);
+    K3 = { renderer, scene, camera, cb, tex: new Map(), rails: new Map() };
+    buildRange3D();
+  } catch (e) { K3 = false; }
+  return K3;
+}
+function sizeT3() {
+  if (!K3) return;
+  K3.renderer.setSize(cv.width, cv.height, false);
+  K3.cb.width = cv.width; K3.cb.height = cv.height;
+  for (const c of [K3.cb, K3.renderer.domElement]) { c.style.width = cv.style.width; c.style.height = cv.style.height; }
+}
+// pinhole projection: focal length K*zz px, principal point chosen so the aim point stays at (cx, cy)
+function setProj(zz, cx, cy, ax, ay) {
+  const f = K * zz, ppx = cx + zz * (W / 2 - ax), ppy = cy + zz * (YH - ay), n = 1, far = 3000;
+  const c = K3.camera;
+  c.projectionMatrix.makePerspective(-ppx / f * n, (W - ppx) / f * n, ppy / f * n, -(H - ppy) / f * n, n, far);
+  c.projectionMatrixInverse.copy(c.projectionMatrix).invert();
+}
+function M3(col, o) { return new THREE.MeshStandardMaterial(Object.assign({ color: col, roughness: 0.75, metalness: 0.2 }, o || {})); }
+function numTex(n, bg, fg) {
+  const key = n + bg + fg; if (K3.tex.has(key)) return K3.tex.get(key);
+  const c = document.createElement('canvas'); c.width = 128; c.height = 64; const g = c.getContext('2d');
+  g.fillStyle = bg; g.fillRect(0, 0, 128, 64); g.fillStyle = fg; g.font = '600 44px "IBM Plex Mono", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(String(n), 64, 35);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; K3.tex.set(key, t); return t;
+}
+function buildRange3D() {
+  const s = K3.scene;
+  K3.box = new THREE.BoxGeometry(1, 1, 1); K3.cyl = new THREE.CylinderGeometry(1, 1, 1, 10); K3.plateG = new THREE.CylinderGeometry(1, 1, 1, 40);
+  K3.post = M3(0x4a4538); K3.steel = M3(0x3b3f44, { metalness: 0.5, roughness: 0.5 }); K3.chain = M3(0x2b2e32, { metalness: 0.6 });
+  K3.shadowM = new THREE.MeshBasicMaterial({ color: 0x3a2c14, transparent: true, opacity: 0.22, depthWrite: false });
+  // distance signs on the left of the range
+  for (let d = 100; d <= 600; d += 100) {
+    const g = new THREE.Group(); g.position.set(-7.5, 0, -d);
+    const p = new THREE.Mesh(K3.box, K3.post); p.scale.set(0.12, 1.6, 0.12); p.position.y = 0.8; g.add(p);
+    const face = new THREE.MeshStandardMaterial({ map: numTex(d, '#f4efe2', '#1d1b16'), roughness: 0.8 });
+    const sign = new THREE.Mesh(K3.box, [K3.post, K3.post, K3.post, K3.post, face, K3.post]); sign.scale.set(1.6, 0.8, 0.08); sign.position.y = 1.9; g.add(sign);
+    s.add(g);
+  }
+  // wind flags on the right
+  const tri = new THREE.BufferGeometry();
+  tri.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1.6, -0.12, 0, 0, -0.55, 0], 3)); tri.computeVertexNormals();
+  const flagM = new THREE.MeshStandardMaterial({ color: 0xff6a1f, side: THREE.DoubleSide, roughness: 0.9, emissive: 0x3a1000 });
+  K3.flags = [250, 450, 600].map(d => {
+    const g = new THREE.Group(); g.position.set(7.5, 0, -d);
+    const pole = new THREE.Mesh(K3.cyl, K3.post); pole.scale.set(0.05, 4, 0.05); pole.position.y = 2; g.add(pole);
+    const fl = new THREE.Group(); fl.position.y = 4; fl.add(new THREE.Mesh(tri, flagM)); g.add(fl);
+    s.add(g); return { d, fl };
+  });
+}
+function plateTexture(t) {
+  if (!t._pc) { t._pc = document.createElement('canvas'); t._pc.width = t._pc.height = 128; t._pt = new THREE.CanvasTexture(t._pc); t._pt.anisotropy = 4; }
+  const g = t._pc.getContext('2d'), m = 64, r = 62;
+  g.clearRect(0, 0, 128, 128);
+  g.fillStyle = t.hit ? '#cfc6b3' : '#f4efe2'; g.beginPath(); g.arc(m, m, r, 0, TAU); g.fill();
+  g.lineWidth = 4; g.strokeStyle = t.hit ? '#7c7466' : '#1d1b16'; g.beginPath(); g.arc(m, m, r * 0.65, 0, TAU); g.stroke();
+  g.fillStyle = t.hit ? '#a58b72' : '#ff6a1f'; g.beginPath(); g.arc(m, m, r * 0.3, 0, TAU); g.fill();
+  g.lineWidth = 6; g.strokeStyle = '#3b3f44'; g.beginPath(); g.arc(m, m, r - 2, 0, TAU); g.stroke();
+  for (const k of t.marks) {
+    const x = m + k.y / t.R * r, y = m - k.x / t.R * r;   // the cylinder cap maps the texture turned a quarter
+    g.fillStyle = '#8d8a84'; g.beginPath(); g.arc(x, y, 6, 0, TAU); g.fill();
+    g.fillStyle = '#3f3c37'; g.beginPath(); g.arc(x, y, 3, 0, TAU); g.fill();
+  }
+  t._pt.needsUpdate = true; t._pkey = (t.hit ? 1 : 0) + ':' + t.marks.length;
+}
+function buildTarget3D(t) {
+  const R = t.R, hang = PLATE_H + R + 0.25, fw = Math.max(R * 1.25, 0.55);
+  const g = new THREE.Group();
+  for (const sx of [-1, 1]) { const p = new THREE.Mesh(K3.cyl, K3.steel); p.scale.set(0.045, hang, 0.045); p.position.set(sx * fw, hang / 2, 0); g.add(p); }
+  const bar = new THREE.Mesh(K3.cyl, K3.steel); bar.scale.set(0.045, fw * 2, 0.045); bar.rotation.z = Math.PI / 2; bar.position.y = hang; g.add(bar);
+  const piv = new THREE.Group(); piv.position.y = hang; g.add(piv);
+  const cl = 0.25 + R * 0.15;
+  for (const sx of [-1, 1]) { const c = new THREE.Mesh(K3.cyl, K3.chain); c.scale.set(0.018, cl, 0.018); c.position.set(sx * R * 0.47, -cl / 2, 0); piv.add(c); }
+  plateTexture(t);
+  const face = new THREE.MeshStandardMaterial({ map: t._pt, transparent: true, roughness: 0.55, metalness: 0.25 });
+  const plate = new THREE.Mesh(K3.plateG, [K3.steel, face, K3.steel]); plate.scale.set(R, 0.04, R); plate.rotation.x = Math.PI / 2;
+  const holder = new THREE.Group(); holder.position.y = -(0.25 + R); holder.add(plate); piv.add(holder);
+  const boardFace = new THREE.MeshStandardMaterial({ map: numTex(t.d, '#1d1b16', '#f4efe2'), roughness: 0.8 });
+  const board = new THREE.Mesh(K3.box, [K3.post, K3.post, K3.post, K3.post, boardFace, K3.post]); board.scale.set(1.1, 0.45, 0.06); board.position.y = 0.225; g.add(board);
+  if (t.kind === 'move') { const tr = new THREE.Mesh(K3.box, K3.steel); tr.scale.set(1.4, 0.25, 0.4); tr.position.y = 0.125; g.add(tr); }
+  const sh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), K3.shadowM); sh.rotation.x = -Math.PI / 2; sh.scale.set(fw * 2 + 0.8, 1.6, 1); sh.position.set(-0.6, 0.02, 0.7); g.add(sh);
+  g.userData = { piv, holder, face };
+  K3.scene.add(g);
+  if (t.kind === 'move') {
+    const a = t.x0 - t.amp - 0.8, b = t.x0 + t.amp + 0.8, rail = new THREE.Mesh(K3.box, M3(0x5b5446));
+    rail.scale.set(b - a, 0.06, 0.08); rail.position.set((a + b) / 2, 0.03, -t.d); K3.scene.add(rail); t._rail = rail;
+  }
+  return g;
+}
+function sync3D() {
+  const live = new Set(targets);
+  for (const t of K3.seen || []) if (!live.has(t)) { K3.scene.remove(t._m); if (t._rail) K3.scene.remove(t._rail); if (t._pt) t._pt.dispose(); }
+  K3.seen = targets.slice();
+  for (const t of targets) {
+    if (!t._m) t._m = buildTarget3D(t);
+    const g = t._m, U = g.userData;
+    g.position.set(t.x, 0, -t.d);
+    g.scale.y = t.kind === 'pop' ? Math.max(0.001, t.vis) : 1;
+    U.piv.rotation.z = -t.sw * 0.35; U.holder.rotation.z = -t.sw * 0.25; U.piv.rotation.x = -Math.abs(t.sw) * 0.25;
+    if (t._pkey !== (t.hit ? 1 : 0) + ':' + t.marks.length) plateTexture(t);
+  }
+  // flags: hang limp in calm air, stand out and flutter as the wind picks up
+  const w = windNow(), strength = clamp(Math.abs(w) / 4.5, 0.08, 1), dir = w >= 0 ? 1 : -1;
+  for (const f of K3.flags) {
+    const droop = (Math.PI / 2) * (1 - strength * 0.85) + Math.sin(clock * (6 + Math.abs(w) * 2) + f.d) * 0.12 * strength;
+    f.fl.scale.x = dir; f.fl.rotation.z = -dir * droop; f.fl.rotation.y = Math.sin(clock * 9 + f.d) * 0.25 * strength;
+  }
+}
+function render3() {
+  const a = effAim(), f = clamp((z - 1) / (ZOOM - 1), 0, 1), geo = scopeGeo();
+  const cx = lerp(a.x, geo.cx, f), cy = lerp(a.y, geo.cy, f), R = lerp(Math.hypot(W, H), geo.R, f);
+  // back: sky, hills, ground, berm (zoomed with the scope)
+  ctx = ctxB;
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0); ctx.globalAlpha = 1;
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(z, z); ctx.translate(-a.x, -a.y); drawWorld(true); ctx.restore();
+  // middle: steel, signs, flags
+  setProj(z, cx, cy, a.x, a.y); sync3D(); K3.renderer.render(K3.scene, K3.camera);
+  // front
+  ctx = ctxT;
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0); ctx.clearRect(0, 0, W, H); ctx.globalAlpha = 1;
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(z, z); ctx.translate(-a.x, -a.y);
+  for (const p of parts) {
+    const al = clamp(p.life / p.max, 0, 1);
+    if (p.k === 'dust') { ctx.fillStyle = `rgba(150,124,84,${al * 0.6})`; ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, TAU); ctx.fill(); }
+    else { ctx.fillStyle = `rgba(255,214,140,${al})`; ctx.fillRect(p.x - p.size, p.y - p.size, p.size * 2, p.size * 2); }
+  }
+  ctx.restore();
+  if (f > 0.001) {
+    if (flashT > 0) { ctx.fillStyle = 'rgba(255,240,210,0.35)'; ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill(); }
+    drawScopeMask(cx, cy, R, f);
+    ctx.save(); ctx.globalAlpha = f; drawReticle(cx, cy, R, z); ctx.restore();
+  }
+  drawDeck(1 - f);
+  if (state === 'menu' || state === 'final') return;
+  if (f < 0.5) {
     ctx.save(); ctx.globalAlpha = 1 - f * 2;
     ctx.strokeStyle = '#ff6a1f'; ctx.lineWidth = 1.4;
     ctx.beginPath(); ctx.arc(a.x, a.y, 9, 0, TAU); ctx.stroke();
