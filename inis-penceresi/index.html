@@ -294,6 +294,7 @@ function localToWorld(lx, ly) { const c = Math.cos(L.a), s = Math.sin(L.a); retu
 function padUnder(x0, x1) { return T.pads.find(p => x0 >= p.x0 - 0.5 && x1 <= p.x1 + 0.5); }
 
 /* ---------- update ---------- */
+const GRAV_K = 0.6;
 function update(dt) {
   clock += dt;
   if (!L.alive || L.landed) { tickParts(dt); engineSound(false); if (endT > 0) { endT -= dt; if (endT <= 0) afterTouchdown(); } return; }
@@ -301,9 +302,10 @@ function update(dt) {
   if (input.left) L.a -= rot * dt;
   if (input.right) L.a += rot * dt;
   L.a = clamp(L.a, -Math.PI / 2, Math.PI / 2);
-  const thrustA = M.g * 2.5;
+  // the game runs on 60 % of the body's real gravity: a softer fall leaves time to coast and feather the engine
+  const g = M.g * GRAV_K, thrustA = g * 2.5;
   L.thrusting = input.thrust && fuel > 0;
-  let ax = 0, ay = -M.g;
+  let ax = 0, ay = -g;
   if (L.thrusting) { ax += Math.sin(L.a) * thrustA; ay += Math.cos(L.a) * thrustA; fuel = Math.max(0, fuel - 14 * dt); }
   engineSound(L.thrusting);
   if (M.wind) { windNow = Math.sin(clock * 0.35) * M.wind + Math.sin(clock * 1.3 + 2) * M.wind * 0.4; ax += windNow; }
