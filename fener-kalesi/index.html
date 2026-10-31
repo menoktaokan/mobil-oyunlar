@@ -637,7 +637,7 @@ function updEnemies(dt) {
       if (e.stunT <= 0 && !e.sub) {
         e.stunT = 6.5;
         parts.push({ k: 'ring', x: e.x, y: e.y, life: 0.8, max: 0.8, size: 10, grow: 100 });
-        for (const p of PADS) if (p.tw && Math.hypot(p.x - e.x, p.y - e.y) < 110) p.tw.stun = 2.5;
+        for (const p of PADS) if (p.tw && Math.hypot(p.x - e.x, p.y - e.y) < 110) p.tw.stun = 1.2;
         shake = Math.max(shake, 6); sfx('horn');
       }
     }
