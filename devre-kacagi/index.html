@@ -10,8 +10,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@500;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
-/* Layout: a tall printed-circuit maze scrolls in the upper part of a portrait screen; the bottom band is a
-   control panel with a real pull lever. Look: dark green board, raised copper traces, silver solder, white
+/* Layout: a tall printed-circuit maze scrolls under a thin HUD and fills the portrait screen; swipes anywhere
+   steer the spark. Look: dark green board, raised copper traces, silver solder, white
    silkscreen labels. One deliberate "workbench electronics" look, no neon haze. */
 :root{
   --board:#0b2a1f; --board2:#071a13; --copper:#cf8a45; --copperhi:#f2b878; --silk:#e7eee4; --muted:#8fa79a;
@@ -66,7 +66,7 @@ h2{font-size:34px}
     <section id="menu" class="sheet" aria-labelledby="t-menu">
       <p class="tag">Devre kartı · sonsuz kaçış</p>
       <h1 id="t-menu">DEVRE<br><em>KAÇAĞI</em></h1>
-      <p class="lede">Kolu çek, kıvılcımı kaydır, bütün lehimi topla.</p>
+      <p class="lede">Ekranı kaydır, kıvılcımı yolla, bütün lehimi topla.</p>
       <div class="row"><button class="go" id="startBtn">Akımı ver</button></div>
       <div class="row">
         <button class="alt" id="muteBtn" aria-pressed="true">Ses</button>
@@ -80,8 +80,8 @@ h2{font-size:34px}
       <p class="tag">Kılavuz</p>
       <h2 id="t-guide">Nasıl oynanır</h2>
       <ul class="guide-list">
-        <li><b>Kol</b>Alttaki kolu bir yöne çek; parmağını ekranın herhangi bir yerinden de çekebilirsin. Klavyede ok tuşları ya da WASD.</li>
-        <li><b>Kayma</b>Kıvılcım çektiğin yöne kayar ve duvara çarpana kadar durmaz. Kayarken başka yöne çekersen ilk dönemeçte o yöne sapar.</li>
+        <li><b>Kaydır</b>Parmağını ekranın herhangi bir yerinde bir yöne kaydır. Klavyede ok tuşları ya da WASD.</li>
+        <li><b>Kayma</b>Kıvılcım kaydırdığın yöne gider ve duvara çarpana kadar durmaz. Giderken başka yöne kaydırırsan ilk dönemeçte o yöne sapar.</li>
         <li><b>Lehim ve kapı</b>Karttaki bütün gümüş lehim damlalarını topla. Hepsi bitince en tepedeki kapı açılır; ona ulaşınca yeni kart başlar.</li>
         <li><b>Aşırı yük</b>Büyük parlak küre. Kısa bir süre düşmanları yiyebilirsin; art arda yedikçe puan katlanır.</li>
         <li><b>Kısa devre</b>Arada bir beliren sarı şimşek. Yakındaki düşmanları birkaç saniye dondurur; donmuş düşmanın içinden geçebilirsin.</li>
@@ -133,7 +133,7 @@ const fmt = n => Math.round(n).toLocaleString('tr-TR');
 function seeded(seed) { let s = (seed * 2654435761) >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
 
 /* ---------- layout ---------- */
-const W = 360, COLS = 15, T = W / COLS, HUD = 40, PANEL = 150;
+const W = 360, COLS = 15, T = W / COLS, HUD = 40, PANEL = 0;
 let H = 640, S = 1, DPR = 1, VY0 = HUD, VH = 450;
 const stage = $('stage'), wrap = $('wrap'), cv = $('cv');
 let ctx = cv.getContext('2d');
@@ -313,7 +313,7 @@ function maxCam() { return Math.max(0, maze.rows * T - VH); }
 
 /* ---------- hero movement ---------- */
 function passable(x, y) { const c = cellAt(x, y); return c === 0 || (c === 2 && gateOpen); }
-let leverDir = -1;               // direction the lever is held in right now (-1 when at rest)
+const leverDir = -1;             // kept for the shared movement code: swipes only queue turns
 function reverse(e) { if (e.prog > 0) { e.tx += DX[e.dir]; e.ty += DY[e.dir]; e.prog = 1 - e.prog; } e.dir = OPP[e.dir]; }
 function stepHero(dt) {
   const h = hero;
@@ -737,58 +737,9 @@ function setSp(v) { if ('letterSpacing' in ctx) ctx.letterSpacing = v; }
 function txt(t, x, y, font, col, align, sp) { ctx.font = font; ctx.fillStyle = col; ctx.textAlign = align || 'left'; ctx.textBaseline = 'alphabetic'; setSp(sp || '0px'); ctx.fillText(t, x, y); setSp('0px'); }
 function boltGlyph(x, y, s, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x + 1 * s, y - 7 * s); ctx.lineTo(x - 4 * s, y + 1 * s); ctx.lineTo(x, y + 1 * s); ctx.lineTo(x - 1.5 * s, y + 7 * s); ctx.lineTo(x + 4.5 * s, y - 1.5 * s); ctx.lineTo(x + 0.5 * s, y - 1.5 * s); ctx.closePath(); ctx.fill(); }
 
-/* ---------- lever ---------- */
-const lever = { kx: 0, ky: 0, vx: 0, vy: 0, held: false, id: null, ox: 0, oy: 0, dir: -1 };
-const LR = 40;                                     // how far the knob travels
-function leverBase() { return { x: W / 2, y: H - PANEL / 2 + 30 }; }
-function updLever(dt) {
-  if (!lever.held) {
-    // springs back to the middle with a short wobble
-    const k = 160, c = 9;
-    lever.vx += (-k * lever.kx - c * lever.vx) * dt; lever.vy += (-k * lever.ky - c * lever.vy) * dt;
-    lever.kx += lever.vx * dt; lever.ky += lever.vy * dt;
-  }
-}
-function drawLever() {
-  const b = leverBase(), top = H - PANEL;
-  // panel: dark board with a copper edge and four LEDs around the socket
-  const g = ctx.createLinearGradient(0, top, 0, H); g.addColorStop(0, '#0a2219'); g.addColorStop(1, '#06150f');
-  ctx.fillStyle = g; ctx.fillRect(0, top, W, PANEL);
-  ctx.fillStyle = '#cf8a45'; ctx.fillRect(0, top, W, 2);
-  ctx.fillStyle = 'rgba(231,238,228,0.18)'; ctx.font = '600 8px "IBM Plex Mono", monospace'; ctx.textAlign = 'left'; ctx.fillText('SW1', 14, top + 16); ctx.textAlign = 'right'; ctx.fillText('KOL-A', W - 14, top + 16);
-  const ledR = 56;
-  for (let d = 0; d < 4; d++) {
-    const x = b.x + DX[d] * ledR * 1.15, y = b.y + DY[d] * ledR * 0.62 - 6, on = lever.dir === d || (lever.held && leverDir === d);
-    ctx.fillStyle = on ? '#bff4ff' : '#1d3a30'; ctx.beginPath(); ctx.arc(x, y, on ? 4.5 : 3.6, 0, TAU); ctx.fill();
-    if (on) { ctx.fillStyle = 'rgba(143,233,255,0.25)'; ctx.beginPath(); ctx.arc(x, y, 10, 0, TAU); ctx.fill(); }
-  }
-  // socket
-  ctx.fillStyle = '#121619'; ctx.beginPath(); ctx.ellipse(b.x, b.y, 34, 17, 0, 0, TAU); ctx.fill();
-  ctx.strokeStyle = '#cf8a45'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(b.x, b.y, 34, 17, 0, 0, TAU); ctx.stroke();
-  ctx.fillStyle = '#05080a'; ctx.beginPath(); ctx.ellipse(b.x, b.y, 15, 7.5, 0, 0, TAU); ctx.fill();
-  // shaft and knob: the knob rides above the socket and leans the way it is pulled
-  const kx = b.x + lever.kx, ky = b.y - 62 + lever.ky * 0.7, len = Math.hypot(kx - b.x, ky - b.y) || 1;
-  const nx = -(ky - b.y) / len, ny = (kx - b.x) / len;
-  const sg = ctx.createLinearGradient(b.x - 5 * nx, b.y - 5 * ny, b.x + 5 * nx, b.y + 5 * ny);
-  sg.addColorStop(0, '#6d7378'); sg.addColorStop(0.45, '#e9eef1'); sg.addColorStop(1, '#4a4f54');
-  ctx.fillStyle = sg; ctx.beginPath();
-  ctx.moveTo(b.x + nx * 4.5, b.y + ny * 4.5); ctx.lineTo(kx + nx * 3, ky + ny * 3); ctx.lineTo(kx - nx * 3, ky - ny * 3); ctx.lineTo(b.x - nx * 4.5, b.y - ny * 4.5); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#2a2e32'; ctx.beginPath(); ctx.ellipse(b.x, b.y, 8, 4, 0, 0, TAU); ctx.fill();
-  const kg = ctx.createRadialGradient(kx - 5, ky - 6, 2, kx, ky, 16);
-  kg.addColorStop(0, '#ffd6cf'); kg.addColorStop(0.25, '#ff5a45'); kg.addColorStop(1, '#8a1408');
-  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(kx + 3, ky + 14, 13, 5, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = kg; ctx.beginPath(); ctx.arc(kx, ky, 15, 0, TAU); ctx.fill();
-}
-function leverFromPointer(px, py) {
-  let dx = px - lever.ox, dy = py - lever.oy; const l = Math.hypot(dx, dy);
-  if (l > LR) { dx *= LR / l; dy *= LR / l; }
-  lever.kx = dx; lever.ky = dy;
-  let d = -1;
-  if (l > 14) d = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 1 : 3) : (dy < 0 ? 0 : 2);
-  if (d !== leverDir && d >= 0) sfx('lever');
-  leverDir = d; lever.dir = d >= 0 ? d : lever.dir;
-}
-
+/* ---------- swipe ---------- */
+// a swipe queues a direction: the spark takes it now if it can, otherwise at the first opening on its way
+function setWant(d) { if (!hero || (state !== 'play' && state !== 'clear')) return; hero.want = d; sfx('lever'); }
 /* ---------- render ---------- */
 function updCam(dt) {
   if (!maze) return;
@@ -848,9 +799,8 @@ function render(dt) {
     const y = VY0 + 14 + Math.sin(clock * 6) * 3; ctx.fillStyle = '#6dff8a';
     ctx.beginPath(); ctx.moveTo(W / 2, y - 8); ctx.lineTo(W / 2 + 9, y + 4); ctx.lineTo(W / 2 - 9, y + 4); ctx.closePath(); ctx.fill();
   }
-  if (state === 'menu') { drawLever(); return; }
+  if (state === 'menu') return;
   drawHUD();
-  drawLever();
   if (banner) {
     const a = clamp(Math.min(banner.t / 0.15, (banner.dur - banner.t) / 0.3), 0, 1), y = VY0 + VH * 0.42;
     ctx.globalAlpha = a; ctx.fillStyle = 'rgba(7,26,19,0.85)'; ctx.fillRect(40, y - 26, W - 80, 40);
@@ -887,36 +837,30 @@ function draw2DFallback() {
 }
 
 /* ---------- input ---------- */
+const sw = { id: null, x: 0, y: 0 };
 wrap.addEventListener('pointerdown', e => {
   if (e.target.closest('button,.sheet') || state === 'menu' || state === 'over') return;
-  if (lever.id !== null) return;
-  const r = cv.getBoundingClientRect(), p = { x: (e.clientX - r.left) / S, y: (e.clientY - r.top) / S };
-  lever.id = e.pointerId; lever.held = true; lever.ox = p.x; lever.oy = p.y; lever.vx = lever.vy = 0;
+  sw.id = e.pointerId; sw.x = e.clientX; sw.y = e.clientY;
   try { wrap.setPointerCapture(e.pointerId); } catch (_) {}
   e.preventDefault(); audioInit();
 });
 wrap.addEventListener('pointermove', e => {
-  if (e.pointerId !== lever.id) return;
-  const r = cv.getBoundingClientRect(); leverFromPointer((e.clientX - r.left) / S, (e.clientY - r.top) / S);
+  if (e.pointerId !== sw.id) return;
+  const dx = e.clientX - sw.x, dy = e.clientY - sw.y, need = 16 * Math.max(1, S * 0.9);
+  if (Math.hypot(dx, dy) < need) return;
+  setWant(Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 1 : 3) : (dy < 0 ? 0 : 2));
+  sw.x = e.clientX; sw.y = e.clientY;            // one finger can queue several turns in a row
 });
-const endLever = e => { if (e.pointerId !== lever.id) return; lever.id = null; lever.held = false; leverDir = -1; };
-wrap.addEventListener('pointerup', endLever); wrap.addEventListener('pointercancel', endLever);
+const endSw = e => { if (e.pointerId === sw.id) sw.id = null; };
+wrap.addEventListener('pointerup', endSw); wrap.addEventListener('pointercancel', endSw);
 const KEYS = { arrowup: 0, w: 0, arrowleft: 1, a: 1, arrowdown: 2, s: 2, arrowright: 3, d: 3 };
-const keyHeld = new Set();
-function keyLever() {
-  const ks = [...keyHeld]; const d = ks.length ? KEYS[ks[ks.length - 1]] : -1;
-  if (lever.id !== null) return;
-  if (d >= 0) { lever.held = true; lever.kx = DX[d] * LR; lever.ky = DY[d] * LR; if (d !== leverDir) sfx('lever'); leverDir = d; lever.dir = d; }
-  else { lever.held = false; leverDir = -1; }
-}
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (state === 'pause' && (k === 'p' || k === 'escape')) { resumeGame(); return; }
   if (state === 'menu' && k === 'enter') { startGame(); return; }
-  if (k in KEYS) { e.preventDefault(); if (state === 'play' || state === 'dying' || state === 'clear') { keyHeld.delete(k); keyHeld.add(k); keyLever(); } }
+  if (k in KEYS) { e.preventDefault(); if (!e.repeat) setWant(KEYS[k]); }
   else if ((k === 'p' || k === 'escape') && (state === 'play' || state === 'clear')) pauseGame();
 });
-window.addEventListener('keyup', e => { const k = e.key.toLowerCase(); if (k in KEYS) { keyHeld.delete(k); keyLever(); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') pauseGame(); });
 
 /* ---------- flow ---------- */
@@ -929,7 +873,7 @@ function startGame() {
   loadLevel(1); state = 'play'; banner = { a: 'Kart 1', t: 0, dur: 1.6 };
   showOnly(null); $('pauseBtn').hidden = false; sfx('start');
 }
-function pauseGame() { if (state !== 'play' && state !== 'clear') return; pausedFrom = state; state = 'pause'; lever.id = null; lever.held = false; leverDir = -1; keyHeld.clear(); showOnly('pause'); $('pauseBtn').hidden = true; }
+function pauseGame() { if (state !== 'play' && state !== 'clear') return; pausedFrom = state; state = 'pause'; sw.id = null; showOnly('pause'); $('pauseBtn').hidden = true; }
 function resumeGame() { if (state !== 'pause') return; state = pausedFrom; showOnly(null); $('pauseBtn').hidden = false; last = performance.now(); }
 function gameOver() {
   state = 'over';
@@ -953,7 +897,6 @@ function demo(dt) {
   camY = (Math.sin(clock * 0.12) * 0.5 + 0.5) * maxCam();
   hero.y = clamp((camY + VH * 0.55) / T - 0.5, 1, maze.rows - 2);
   for (const e of ens) e.anim += dt;
-  if (Math.floor(clock * 0.5) !== Math.floor((clock - dt) * 0.5)) { lever.kx = rand(-LR, LR); lever.ky = rand(-LR, LR) * 0.4; lever.vx = lever.vy = 0; }
 }
 
 /* ---------- loop ---------- */
@@ -962,7 +905,6 @@ function frame(now) {
   const dt = Math.min(0.033, Math.max(0, (now - last) / 1000)); last = now;
   if (state === 'play' || state === 'dying' || state === 'clear') { update(dt); updCam(dt); }
   else if (state === 'menu') demo(dt);
-  updLever(dt);
   render(dt);
   requestAnimationFrame(frame);
 }
