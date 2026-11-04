@@ -18,6 +18,7 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 | Lunapark Pinball | Pinball | [`lunapark-pinball/`](lunapark-pinball/) |
 | Sazlık Avı | Ördek avı | [`sazlik-avi/`](sazlik-avi/) |
 | Mahalle Kedisi 3D | Labirent kaçışı | [`mahalle-kedisi/`](mahalle-kedisi/) |
+| Devre Kaçağı 3D | Kollu labirent kaçışı | [`devre-kacagi/`](devre-kacagi/) |
 
 ## Oynamak
 
