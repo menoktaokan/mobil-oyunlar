@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Lunapark Pinball</title>
@@ -70,6 +70,12 @@ h2{font-size:32px;color:var(--mustard)}
 #guide{z-index:9}
 [hidden]{display:none!important}
 #muteBtn[aria-pressed="false"],#muteBtn2[aria-pressed="false"]{text-decoration:line-through;text-decoration-thickness:2px}
+</style>
+<style id="dokunma-kalkani">
+*,*::before,*::after{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+input,textarea,[contenteditable]{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+html,body{overscroll-behavior:none;-webkit-text-size-adjust:100%;text-size-adjust:100%}
+img,canvas,svg{-webkit-user-drag:none}
 </style>
 </head>
 <body>
@@ -711,6 +717,20 @@ requestAnimationFrame(frame);
     const row = b.parentElement, go = row && row.querySelector('#startBtn');
     if (go) { row.style.flexWrap = 'wrap'; go.style.flex = '1 1 100%'; for (const c of row.children) if (c !== go && !c.hidden) c.style.flex = '1 1 0'; }
   }
+})();
+</script>
+<script id="dokunma-kalkani-js">
+(() => {
+  // Uzun basma, çift dokunma ve sürüklemenin metin seçmesini, menü açmasını, sayfayı büyütmesini engelle
+  const typing = t => { const el = t && (t.nodeType === 1 ? t : t.parentElement); return !!(el && el.closest && el.closest('input,textarea,[contenteditable]')); };
+  const stop = e => { if (!typing(e.target)) e.preventDefault(); };
+  for (const ev of ['selectstart', 'contextmenu', 'dragstart']) document.addEventListener(ev, stop);
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault());
+  document.addEventListener('pointerdown', e => {
+    if (typing(e.target)) return;
+    const s = window.getSelection && window.getSelection();
+    if (s && s.rangeCount && !s.isCollapsed) s.removeAllRanges();
+  }, true);
 })();
 </script>
 </body>
