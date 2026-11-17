@@ -35,3 +35,14 @@ index.html            oyun seçme sayfası
 ```
 
 Yazı tipleri Google Fonts'tan yüklenir; bağlantı yoksa sistem yazı tipine düşer. Sesler WebAudio ile anlık üretilir, harici ses dosyası yoktur.
+
+## Android uygulaması
+
+`uygulama/` klasörü bütün oyunları tek bir Android uygulamasında toplar (Capacitor). Derleme sırasında three.js ve yazı tipleri uygulamanın içine gömülür, böylece oyunlar internetsiz çalışır.
+
+- `main` dalına her gönderimde GitHub Actions uygulamayı derler; çıktılar **Releases → android-latest** altına konur:
+  - `mobil-oyunlar-test.apk`: telefona doğrudan kurup denemek için
+  - `mobil-oyunlar.aab`: Play Console'a yüklenecek paket (yükleme anahtarı secret'ları tanımlıysa imzalı)
+- Yerelde: `cd uygulama && npm ci && npm run sync`, ardından `android/` klasörü Android Studio ile açılabilir.
+- Mağaza metinleri ve görselleri: `uygulama/magaza/`
+- Gizlilik politikası: [`gizlilik.html`](gizlilik.html)
