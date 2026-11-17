@@ -146,6 +146,7 @@ img,canvas,svg{-webkit-user-drag:none}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -174,6 +175,7 @@ function resize() {
   const avail = H - PH - HUDH;
   ts = Math.min(W / TW, avail / TH);
   ox = (W - TW * ts) / 2; oy = HUDH + (avail - TH * ts) / 2;
+  if (K3) sizeT3();
   buildArt();
 }
 
@@ -256,22 +258,23 @@ function buildArt() {
   g.fillStyle = ag; g.fillRect(12, 500, 310, 60);
   // walls
   g.lineCap = 'round'; g.lineJoin = 'round';
-  for (const s of segs) {
+  if (!K3) for (const s of segs) {
     if (s.kind !== 'wall') continue;
     g.strokeStyle = '#6d5a8f'; g.lineWidth = s.r * 2 + 3; g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
     g.strokeStyle = C.chrome; g.lineWidth = Math.max(1.5, s.r * 2 - 1); g.beginPath(); g.moveTo(s.x1, s.y1); g.lineTo(s.x2, s.y2); g.stroke();
   }
   // sling bodies
-  for (const s of [1, -1]) {
+  if (!K3) for (const s of [1, -1]) {
     const f = x => s > 0 ? x : M(x);
     g.fillStyle = '#3d2a5e'; g.beginPath(); g.moveTo(f(SL.A[0]), SL.A[1]); g.lineTo(f(SL.B[0]), SL.B[1]); g.lineTo(f(SL.Cc[0]), SL.Cc[1]); g.closePath(); g.fill();
   }
   // posts
-  for (const p of circles) if (p.kind === 'post') { g.fillStyle = C.chrome; g.beginPath(); g.arc(p.x, p.y, p.r, 0, TAU); g.fill(); }
+  if (!K3) for (const p of circles) if (p.kind === 'post') { g.fillStyle = C.chrome; g.beginPath(); g.arc(p.x, p.y, p.r, 0, TAU); g.fill(); }
   // saucer ring
   g.fillStyle = '#0c0816'; g.beginPath(); g.arc(SAUCER.x, SAUCER.y, SAUCER.r + 2, 0, TAU); g.fill();
   g.strokeStyle = C.mustard; g.lineWidth = 2; g.beginPath(); g.arc(SAUCER.x, SAUCER.y, SAUCER.r + 4, 0, TAU); g.stroke();
   art = c;
+  floorTex3();
 }
 
 /* ---------- audio ---------- */
@@ -528,8 +531,10 @@ function drawFlipper(f) {
   ctx.fillStyle = C.chrome; ctx.beginPath(); ctx.arc(f.px, f.py, 3, 0, TAU); ctx.fill();
 }
 function render() {
+  const k3 = initT3();
+  if (k3) render3();
   ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
-  ctx.fillStyle = '#140d22'; ctx.fillRect(0, 0, W, H);
+  if (k3) ctx.clearRect(0, 0, W, H); else { ctx.fillStyle = '#140d22'; ctx.fillRect(0, 0, W, H); }
   // HUD strip
   ctx.fillStyle = '#2b1220'; ctx.fillRect(0, 0, W, HUDH);
   ctx.fillStyle = C.mustard; ctx.fillRect(0, HUDH - 2, W, 2);
@@ -546,6 +551,16 @@ function render() {
   }
   // table
   ctx.setTransform(S * DPR * ts, 0, 0, S * DPR * ts, S * DPR * ox, S * DPR * oy);
+  if (K3) {
+    for (const b of balls) b.trail.forEach((p, i) => { ctx.globalAlpha = (i + 1) / 16; ctx.fillStyle = C.cream; ctx.beginPath(); ctx.arc(p.x, p.y - lift(BR), BR * 0.8, 0, TAU); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    txt('KURTARMA', 167, 548, '800 7px Rubik, sans-serif', saveT > 0 ? C.teal : 'rgba(46,211,192,0.35)', 'center', '1px');
+    if (state === 'play' && balls.some(b => b.inLane) && ballN === 1 && score === 0) {
+      txt('Fırlat tuşunu basılı tut,', 167, 300, '700 12px Rubik, sans-serif', C.cream, 'center');
+      txt('sonra bırak', 167, 316, '700 12px Rubik, sans-serif', C.cream, 'center');
+    }
+    return;
+  }
   if (art) ctx.drawImage(art, 0, 0, TW, TH);
   // lanes
   const L = ['Ş', 'A', 'N', 'S'];
@@ -599,6 +614,168 @@ function render() {
     txt('Fırlat tuşunu basılı tut,', 167, 300, '700 12px Rubik, sans-serif', C.cream, 'center');
     txt('sonra bırak', 167, 316, '700 12px Rubik, sans-serif', C.cream, 'center');
   }
+}
+
+/* ---------- 3D table (Three.js) ----------
+   An orthographic camera tilted back from straight down. Everything sits in a root group stretched along the
+   table's length, so table coordinates go in as they are and every point on the playfield lands on the same
+   screen spot as the 2D table: physics and touch never change. Rails, bumpers, slings, targets, flippers, plunger
+   and ball stand up from the painted playfield; score and messages stay on the 2D canvas above. */
+const TILT = 0.62, COSV = Math.cos(TILT), SINV = Math.sin(TILT), RAIL = 11;
+const lift = h => h * SINV;
+let K3 = null;
+function initT3() {
+  if (K3 !== null) return K3;
+  K3 = false;
+  if (typeof THREE === 'undefined') return K3;
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setClearColor(0x140d22, 1);
+    const el = renderer.domElement; el.style.position = 'absolute'; el.style.left = '0'; el.style.top = '0';
+    wrap.insertBefore(el, cv); cv.style.position = 'relative';
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -3000, 3000);
+    camera.position.set(0, 1000 * COSV, 1000 * SINV); camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0);
+    scene.add(new THREE.AmbientLight(0xd8c8ff, 0.55));
+    const key = new THREE.DirectionalLight(0xfff0dc, 0.75); key.position.set(-120, 400, 260); scene.add(key);
+    const pinkL = new THREE.PointLight(0xff7ab8, 0.7, 420, 1.2); pinkL.position.set(40, 90, 120); scene.add(pinkL);
+    const tealL = new THREE.PointLight(0x2ed3c0, 0.6, 420, 1.2); tealL.position.set(300, 90, 300); scene.add(tealL);
+    const root = new THREE.Group(); root.scale.z = 1 / COSV; scene.add(root);
+    K3 = { renderer, scene, camera, root, mats: {} };
+    build3();
+  } catch (e) { K3 = false; }
+  return K3;
+}
+function sizeT3() {
+  if (!K3) return;
+  K3.renderer.setPixelRatio(DPR);
+  K3.renderer.setSize(Math.round(W * S), Math.round(H * S));
+  const c = K3.camera; c.left = -ox / ts; c.right = (W - ox) / ts; c.top = oy / ts; c.bottom = -(H - oy) / ts; c.updateProjectionMatrix();
+}
+function MT(col, o) {
+  const key = col + JSON.stringify(o || {});
+  if (!K3.mats[key]) K3.mats[key] = new THREE.MeshStandardMaterial(Object.assign({ color: col, roughness: 0.5, metalness: 0.1 }, o || {}));
+  return K3.mats[key];
+}
+function labelTex(text, bg, fg, font, size) {
+  const c = document.createElement('canvas'); c.width = c.height = size || 64;
+  const g = c.getContext('2d'); g.fillStyle = bg; g.beginPath(); g.arc(c.width / 2, c.height / 2, c.width / 2, 0, TAU); g.fill();
+  g.fillStyle = fg; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, c.width / 2, c.height / 2 + 2);
+  const t = new THREE.CanvasTexture(c); t.anisotropy = 4; return t;
+}
+// a flat disc lying on the playfield
+function disc(r, mat, x, y, h) { const m = new THREE.Mesh(new THREE.CircleGeometry(r, 28), mat); m.rotation.x = -Math.PI / 2; m.position.set(x, h || 0.3, y); K3.root.add(m); return m; }
+// a prism standing on a table-plane polygon
+function prism(pts, h, mat, y0) {
+  const sh = new THREE.Shape(); pts.forEach(([x, y], i) => i ? sh.lineTo(x, -y) : sh.moveTo(x, -y));
+  const g = new THREE.ExtrudeGeometry(sh, { depth: h, bevelEnabled: false }); g.rotateX(-Math.PI / 2);
+  const m = new THREE.Mesh(g, mat); m.position.y = y0 || 0; K3.root.add(m); return m;
+}
+function build3() {
+  const R = K3.root, box = new THREE.BoxGeometry(1, 1, 1), cyl = new THREE.CylinderGeometry(1, 1, 1, 24);
+  K3.box = box;
+  // playfield
+  K3.floorTex = null;
+  K3.floor = new THREE.Mesh(new THREE.PlaneGeometry(TW, TH), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 }));
+  K3.floor.rotation.x = -Math.PI / 2; K3.floor.position.set(TW / 2, 0, TH / 2); R.add(K3.floor);
+  // rails: every wall segment becomes a chrome rail on a dark plinth
+  const chrome = MT('#d9d3e6', { metalness: 0.55, roughness: 0.28 }), plinth = MT('#6d5a8f', { roughness: 0.6 });
+  for (const s of segs) {
+    if (s.kind !== 'wall') continue;
+    const dx = s.x2 - s.x1, dy = s.y2 - s.y1, len = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
+    const base = new THREE.Mesh(box, plinth); base.scale.set(len + s.r * 2, RAIL * 0.55, s.r * 2 + 3); base.rotation.y = -a; base.position.set((s.x1 + s.x2) / 2, RAIL * 0.275, (s.y1 + s.y2) / 2); R.add(base);
+    const top = new THREE.Mesh(box, chrome); top.scale.set(len + s.r * 2, RAIL * 0.45, Math.max(1.5, s.r * 2 - 1)); top.rotation.y = -a; top.position.set((s.x1 + s.x2) / 2, RAIL * 0.775, (s.y1 + s.y2) / 2); R.add(top);
+  }
+  // posts
+  for (const p of circles) if (p.kind === 'post') { const m = new THREE.Mesh(cyl, chrome); m.scale.set(p.r, 12, p.r); m.position.set(p.x, 6, p.y); R.add(m); }
+  // slingshots: plum body, white rubber kick edge
+  K3.slingRubber = [];
+  for (const s of [0, 1]) {
+    const f = x => s === 0 ? x : M(x);
+    prism([[f(SL.A[0]), SL.A[1]], [f(SL.B[0]), SL.B[1]], [f(SL.Cc[0]), SL.Cc[1]]], 9, MT('#3d2a5e', { roughness: 0.55 }));
+    const ax = f(SL.A[0]), ay = SL.A[1], cx = f(SL.Cc[0]), cy = SL.Cc[1], len = Math.hypot(cx - ax, cy - ay);
+    const rub = new THREE.Mesh(box, new THREE.MeshStandardMaterial({ color: 0xfff3dc, roughness: 0.6, emissive: 0xffc23d, emissiveIntensity: 0 }));
+    rub.scale.set(len, 9.5, 3); rub.rotation.y = -Math.atan2(cy - ay, cx - ax); rub.position.set((ax + cx) / 2, 4.75, (ay + cy) / 2); R.add(rub); K3.slingRubber.push(rub);
+  }
+  // bumpers: coloured skirt, cream cap with the score on it, a ring of chaser lights
+  K3.bump = BUMPERS.map(c => {
+    const g = new THREE.Group(); g.position.set(c.x, 0, c.y); R.add(g);
+    const col = [C.tomato, C.teal, C.pink][c.id];
+    const skirt = new THREE.Mesh(cyl, MT(col, { roughness: 0.4 })); skirt.scale.set(c.r, 9, c.r); skirt.position.y = 4.5; g.add(skirt);
+    const ringM = new THREE.Mesh(new THREE.TorusGeometry(c.r * 0.92, 1.4, 8, 28), chrome); ringM.rotation.x = Math.PI / 2; ringM.position.y = 9.2; g.add(ringM);
+    const capTex = labelTex('100', C.cream, '#3a1a2c', '800 22px Rubik, sans-serif'); capTex.wrapS = capTex.wrapT = THREE.RepeatWrapping; capTex.repeat.set(-1, -1);   // the cylinder top cap maps its texture flipped
+    const capMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: capTex, roughness: 0.35, emissive: 0xffc23d, emissiveIntensity: 0 });
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(c.r * 0.62, c.r * 0.66, 3, 24), [MT(C.cream), capMat, MT(C.cream)]); cap.position.y = 11; cap.rotation.y = -Math.PI / 2; g.add(cap);
+    const dots = new THREE.Group(); dots.position.y = 9.6; g.add(dots);
+    for (let i = 0; i < 8; i++) { const d = new THREE.Mesh(new THREE.SphereGeometry(1.5, 8, 6), MT(C.mustard, { emissive: C.mustard, emissiveIntensity: 0.6 })); const a = i * TAU / 8; d.position.set(Math.cos(a) * c.r * 0.8, 0, Math.sin(a) * c.r * 0.8); dots.add(d); }
+    return { skirt, capMat, dots, col };
+  });
+  // drop targets and standups
+  K3.drops = DROPS.map(d => { const m = new THREE.Mesh(box, MT(C.teal, { roughness: 0.35, emissive: C.teal, emissiveIntensity: 0.25 })); m.scale.set(7, 12, 18); m.position.set(20.5, 6, d.y + 9); R.add(m); return m; });
+  K3.stands = STANDS.map(s => { const m = new THREE.Mesh(box, new THREE.MeshStandardMaterial({ color: 0x6d3a5e, roughness: 0.4, emissive: 0xff7ab8, emissiveIntensity: 0 })); m.scale.set(6, 12, 16); m.position.set(316, 6, s.y + 8); R.add(m); return m; });
+  // lane inserts with their letters
+  K3.lanes = ['Ş', 'A', 'N', 'S'].map((L, i) => {
+    const on = new THREE.MeshBasicMaterial({ map: labelTex(L, C.mustard, '#3a1a2c', '800 34px Rubik, sans-serif') });
+    const off = new THREE.MeshBasicMaterial({ map: labelTex(L, '#4a2a3a', 'rgba(255,243,220,0.6)', '800 34px Rubik, sans-serif') });
+    return { m: disc(9, off, LANE_C[i], 112), on, off };
+  });
+  // saucer glow, ball-save light
+  K3.saucer = disc(16, new THREE.MeshBasicMaterial({ color: 0xffc23d, transparent: true, opacity: 0, depthWrite: false }), SAUCER.x, SAUCER.y, 0.2);
+  K3.save = disc(6, new THREE.MeshBasicMaterial({ color: 0x2ed3c0, transparent: true, opacity: 0.2 }), 167, 528);
+  // flippers: a tapered bat with a chrome pivot
+  const fs = new THREE.Shape();
+  fs.moveTo(0, -7); fs.lineTo(50, -4.5); fs.absarc(50, 0, 4.5, -Math.PI / 2, Math.PI / 2, false); fs.lineTo(0, 7); fs.absarc(0, 0, 7, Math.PI / 2, Math.PI * 1.5, false);
+  const fg = new THREE.ExtrudeGeometry(fs, { depth: 8, bevelEnabled: true, bevelThickness: 1, bevelSize: 1, bevelSegments: 2 }); fg.rotateX(-Math.PI / 2);
+  K3.flip = [FL, FR].map(f => {
+    const g = new THREE.Group(); g.position.set(f.px, 0.5, f.py); R.add(g);
+    const bat = new THREE.Mesh(fg, MT(C.tomato, { roughness: 0.35 })); g.add(bat);
+    const stripe = new THREE.Mesh(box, MT(C.cream)); stripe.scale.set(40, 0.6, 2.4); stripe.position.set(25, 9.4, 0); g.add(stripe);
+    const pin = new THREE.Mesh(cyl, chrome); pin.scale.set(3, 11, 3); pin.position.y = 5; g.add(pin);
+    return g;
+  });
+  // plunger
+  K3.plunger = new THREE.Group(); R.add(K3.plunger);
+  const rod = new THREE.Mesh(box, MT('#6d5a8f')); rod.scale.set(8, 6, 1); K3.plunger.add(rod);
+  const tip = new THREE.Mesh(box, chrome); tip.scale.set(14, 8, 4); tip.position.set(0, 4, 2); K3.plunger.add(tip);
+  K3.rod = rod;
+  // balls and their contact shadows
+  K3.ballGeo = new THREE.SphereGeometry(BR, 24, 16);
+  K3.ballMat = new THREE.MeshStandardMaterial({ color: 0xe8e2f2, metalness: 0.45, roughness: 0.16 });
+  K3.shadowMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false });
+  K3.balls = [];
+}
+function floorTex3() {
+  if (!K3 || !art) return;
+  if (K3.floorTex) K3.floorTex.dispose();
+  K3.floorTex = new THREE.CanvasTexture(art); K3.floorTex.anisotropy = 8;
+  K3.floor.material.map = K3.floorTex; K3.floor.material.needsUpdate = true;
+}
+function render3() {
+  BUMPERS.forEach((c, i) => {
+    const b = K3.bump[i], f = c.flash > 0;
+    b.capMat.emissiveIntensity = f ? 0.9 : 0; b.skirt.material = MT(f ? C.cream : b.col, { roughness: 0.4 });
+    b.dots.rotation.y = -clock * 0.6;
+  });
+  K3.slingRubber.forEach((r, i) => r.material.emissiveIntensity = slingFlash[i] > 0 ? 1.1 : 0);
+  DROPS.forEach((d, i) => { const m = K3.drops[i]; m.position.y = d.down ? -5 : 6; });
+  STANDS.forEach((s, i) => { K3.stands[i].material.emissiveIntensity = s.lit ? 0.9 : 0; K3.stands[i].material.color.set(s.lit ? C.pink : '#6d3a5e'); });
+  K3.lanes.forEach((l, i) => l.m.material = lanes[i] ? l.on : l.off);
+  K3.saucer.material.opacity = multiLit || saucerBall ? 0.35 + Math.sin(clock * 8) * 0.2 : 0;
+  K3.save.material.opacity = saveT > 0 ? (saveT > 2 || Math.floor(clock * 6) % 2 ? 1 : 0.2) : 0.15;
+  [FL, FR].forEach((f, i) => K3.flip[i].rotation.y = -f.a);
+  const pl = TH - PLUNGE.y; K3.rod.scale.z = Math.max(1, pl); K3.rod.position.set(0, 3, pl / 2);
+  K3.plunger.position.set(PLUNGE.x, 0, PLUNGE.y);
+  while (K3.balls.length < balls.length) {
+    const m = new THREE.Mesh(K3.ballGeo, K3.ballMat), sh = new THREE.Mesh(new THREE.CircleGeometry(BR, 20), K3.shadowMat);
+    sh.rotation.x = -Math.PI / 2; K3.root.add(m); K3.root.add(sh); K3.balls.push({ m, sh });
+  }
+  K3.balls.forEach((o, i) => {
+    const b = balls[i]; o.m.visible = o.sh.visible = !!b;
+    if (!b) return;
+    o.m.position.set(b.x, BR, b.y); o.m.rotation.set(b.y / BR, 0, -b.x / BR);
+    o.sh.position.set(b.x + 2.5, 0.25, b.y + 3);
+  });
+  K3.renderer.render(K3.scene, K3.camera);
 }
 
 /* ---------- input ---------- */
@@ -691,6 +868,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 window.addEventListener('resize', resize);
+initT3();
 resize();
 toMenu();
 setMuteUI();

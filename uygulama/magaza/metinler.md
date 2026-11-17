@@ -12,17 +12,17 @@ Tek uygulamada 13 oyun. Hepsi telefonda, dikey ekranda, tek elle oynanacak şeki
 Oyunların sonu yok: her biri sen iyileştikçe zorlaşarak sürer.
 
 OYUNLAR
-• Hurda Arena 3D: Hurdalıkta tank savaşı. Dalgaları temizle, modül topla, havan ve mayınla taktik kur. Kolay, orta, zor.
-• Yörünge Avcısı 3D: Dikey kaydırmalı uzay nişancısı. Düşman dizilerini dağıt, zinciri koru.
-• Menzil 600 3D: Keskin nişancı atış alanı. Rüzgârı ve mesafeyi hesaba katıp çelik hedefleri vur.
-• Fener Kalesi 3D: Kanaldan limana süzülen gemileri fener topu ve adacıklara kurduğun taretlerle durdur.
-• Devre Kaçağı 3D: Devre kartı labirentinde kayarak kaç. Kaydır, duvara kadar git, lehimleri topla.
-• Mahalle Kedisi 3D: Sokaklardaki mamaları topla, köpeklerden kaç; ciğeri kapınca sıra sende.
-• Akide Patlat 3D: Akide fırlat, aynı renkten üçünü yan yana getirip patlat, kavanozları boşalt.
-• Otoban 84 3D: Retro otoyolda şerit değiştir, yakıtı topla, kıl payı geçişlerle puanı katla.
-• Çini Kırma 3D: Topu sektirip çini desenlerini kır.
-• Göktaşı 3D: Gemini yönet, göktaşlarını parçala, uçan dairelere yakalanma.
-• İniş Penceresi 3D: Yakıtı idareli kullan, aracı dar pistlere yumuşakça indir.
+• Hurda Arena: Hurdalıkta tank savaşı. Dalgaları temizle, modül topla, havan ve mayınla taktik kur. Kolay, orta, zor.
+• Yörünge Avcısı: Dikey kaydırmalı uzay nişancısı. Düşman dizilerini dağıt, zinciri koru.
+• Menzil 600: Keskin nişancı atış alanı. Rüzgârı ve mesafeyi hesaba katıp çelik hedefleri vur.
+• Fener Kalesi: Kanaldan limana süzülen gemileri fener topu ve adacıklara kurduğun taretlerle durdur.
+• Devre Kaçağı: Devre kartı labirentinde kayarak kaç. Kaydır, duvara kadar git, lehimleri topla.
+• Mahalle Kedisi: Sokaklardaki mamaları topla, köpeklerden kaç; ciğeri kapınca sıra sende.
+• Akide Patlat: Akide fırlat, aynı renkten üçünü yan yana getirip patlat, kavanozları boşalt.
+• Otoban 84: Retro otoyolda şerit değiştir, yakıtı topla, kıl payı geçişlerle puanı katla.
+• Çini Kırma: Topu sektirip çini desenlerini kır.
+• Göktaşı: Gemini yönet, göktaşlarını parçala, uçan dairelere yakalanma.
+• İniş Penceresi: Yakıtı idareli kullan, aracı dar pistlere yumuşakça indir.
 • Lunapark Pinball: Lunapark temalı pinball masası.
 • Sazlık Avı: Sazlıktan havalanan ördekleri yakala.
 

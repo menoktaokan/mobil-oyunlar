@@ -6,19 +6,19 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 
 | Oyun | Tür | Klasör |
 |---|---|---|
-| Hurda Arena 3D | Arena tank savaşı, Kolay / Orta / Zor | [`hurda-arena/`](hurda-arena/) |
-| Yörünge Avcısı 3D | Uzay nişancısı | [`yorunge-avcisi/`](yorunge-avcisi/) |
-| Menzil 600 3D | Keskin nişancı | [`menzil-600/`](menzil-600/) |
-| Fener Kalesi 3D | Kule savunması, 3d kuleler | [`fener-kalesi/`](fener-kalesi/) |
-| Otoban 84 3D | Retro trafik yarışı | [`otoban-84/`](otoban-84/) |
-| Çini Kırma 3D | Tuğla kırma | [`cini-kirma/`](cini-kirma/) |
-| Akide Patlat 3D | Balon patlatma | [`akide-patlat/`](akide-patlat/) |
-| Göktaşı 3D | Göktaşı avı | [`goktasi/`](goktasi/) |
-| İniş Penceresi 3D | Ay'a iniş | [`inis-penceresi/`](inis-penceresi/) |
+| Hurda Arena | Arena tank savaşı, Kolay / Orta / Zor | [`hurda-arena/`](hurda-arena/) |
+| Yörünge Avcısı | Uzay nişancısı | [`yorunge-avcisi/`](yorunge-avcisi/) |
+| Menzil 600 | Keskin nişancı | [`menzil-600/`](menzil-600/) |
+| Fener Kalesi | Kule savunması | [`fener-kalesi/`](fener-kalesi/) |
+| Otoban 84 | Retro trafik yarışı | [`otoban-84/`](otoban-84/) |
+| Çini Kırma | Tuğla kırma | [`cini-kirma/`](cini-kirma/) |
+| Akide Patlat | Balon patlatma | [`akide-patlat/`](akide-patlat/) |
+| Göktaşı | Göktaşı avı | [`goktasi/`](goktasi/) |
+| İniş Penceresi | Ay'a iniş | [`inis-penceresi/`](inis-penceresi/) |
 | Lunapark Pinball | Pinball | [`lunapark-pinball/`](lunapark-pinball/) |
 | Sazlık Avı | Ördek avı | [`sazlik-avi/`](sazlik-avi/) |
-| Mahalle Kedisi 3D | Labirent kaçışı | [`mahalle-kedisi/`](mahalle-kedisi/) |
-| Devre Kaçağı 3D | Kaydırmalı labirent kaçışı | [`devre-kacagi/`](devre-kacagi/) |
+| Mahalle Kedisi | Labirent kaçışı | [`mahalle-kedisi/`](mahalle-kedisi/) |
+| Devre Kaçağı | Kaydırmalı labirent kaçışı | [`devre-kacagi/`](devre-kacagi/) |
 
 ## Oynamak
 
