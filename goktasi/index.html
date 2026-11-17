@@ -129,6 +129,7 @@ img,canvas,svg{-webkit-user-drag:none}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -152,6 +153,7 @@ function resize() {
   cv.style.width = ww + 'px'; cv.style.height = sh + 'px';
   PH = 0; GH = H;
   makeStars();
+  if (K3) sizeT3();
 }
 let stars = [];
 function makeStars() { stars = []; for (let i = 0; i < 70; i++) stars.push({ x: rand(0, W), y: rand(0, GH), a: rand(0.08, 0.35) }); }
@@ -417,10 +419,12 @@ function rockPts(r, x, y) { const n = r.pts.length; return r.pts.map((k, i) => {
 function setSp(v) { if ('letterSpacing' in ctx) ctx.letterSpacing = v; }
 function txt(t, x, y, size, col, align, sp, w) { ctx.font = (w || 400) + ' ' + size + 'px "Chivo Mono", monospace'; ctx.textAlign = align || 'left'; ctx.textBaseline = 'alphabetic'; setSp(sp || '0px'); ctx.fillStyle = 'rgba(150,200,255,0.35)'; ctx.fillText(t, x, y + 0.5); ctx.fillStyle = col || '#e8f4ff'; ctx.fillText(t, x, y); setSp('0px'); }
 function render() {
+  const k3 = initT3();
   ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  if (k3) { render3(); ctx.clearRect(0, 0, W, H); } else {
   ctx.fillStyle = '#030405'; ctx.fillRect(0, 0, W, H);
   for (const s of stars) { ctx.fillStyle = `rgba(232,244,255,${s.a})`; ctx.fillRect(s.x, s.y, 1, 1); }
-  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   for (const r of rocks) drawWrapped(r.x, r.y, r.r, (x, y) => glowLine(rockPts(r, x, y), true));
   for (const u of ufos) drawWrapped(u.x, u.y, u.w, (x, y) => {
     const w = u.w, h = u.h;
@@ -439,6 +443,7 @@ function render() {
         glowLine(f, false, '#ffb27a');
       }
     });
+  }
   }
   ctx.fillStyle = '#e8f4ff';
   for (const b of bullets) { ctx.fillStyle = 'rgba(150,200,255,0.35)'; ctx.fillRect(b.x - 2.5, b.y - 2.5, 5, 5); ctx.fillStyle = '#ffffff'; ctx.fillRect(b.x - 1.2, b.y - 1.2, 2.4, 2.4); }
@@ -468,6 +473,142 @@ function render() {
     ctx.beginPath(); ctx.arc(stick.ox + stick.kx * 44, stick.oy + stick.ky * 44, 16, 0, TAU); ctx.fill();
   }
   if (fireTouch.id !== null) { ctx.strokeStyle = 'rgba(255,90,74,0.4)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(fireTouch.x, fireTouch.y, 22, 0, TAU); ctx.stroke(); }
+}
+
+/* ---------- 3D view (Three.js) ----------
+   Straight top-down orthographic camera: game (x, y) is world (x, 0, y), so wrapping, collisions and touch stay in
+   game units. Rocks are faceted stones that tumble; a faint outline keeps the old vector look. Bullets, sparks and
+   the HUD stay on the 2D canvas above. */
+let K3 = null;
+function initT3() {
+  if (K3 !== null) return K3;
+  K3 = false;
+  if (typeof THREE === 'undefined') return K3;
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setClearColor(0x030405, 1);
+    const el = renderer.domElement; el.style.position = 'absolute'; el.style.left = '0'; el.style.top = '0';
+    wrap.insertBefore(el, cv); cv.style.position = 'relative';
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(0, W, 0, -H, -500, 500);
+    camera.position.set(0, 200, 0); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0);
+    scene.add(new THREE.AmbientLight(0x8fa6c8, 0.28));
+    const key = new THREE.DirectionalLight(0xfff4e6, 1.05); key.position.set(-0.55, 1, -0.7); scene.add(key);
+    const rim = new THREE.DirectionalLight(0x6fb8ff, 0.55); rim.position.set(0.8, 0.25, 0.9); scene.add(rim);
+    const engine = new THREE.PointLight(0xffa060, 0, 70, 1.5); scene.add(engine);
+    K3 = { renderer, scene, camera, engine, rocks: new Map(), ufos: new Map(),
+           rockMat: new THREE.MeshStandardMaterial({ color: 0x6b727d, roughness: 0.92, metalness: 0.05, flatShading: true }),
+           edgeMat: new THREE.LineBasicMaterial({ color: 0xbcd8ff, transparent: true, opacity: 0.22 }) };
+    buildStars3(); K3.ship = shipModel(); scene.add(K3.ship.g);
+  } catch (e) { K3 = false; }
+  return K3;
+}
+function sizeT3() {
+  if (!K3) return;
+  K3.renderer.setPixelRatio(DPR);
+  K3.renderer.setSize(Math.round(W * S), Math.round(H * S));
+  const c = K3.camera; c.left = 0; c.right = W; c.top = 0; c.bottom = -H; c.updateProjectionMatrix();
+  buildStars3();
+}
+function buildStars3() {
+  if (K3.stars) { K3.scene.remove(K3.stars); K3.stars.geometry.dispose(); }
+  const pos = new Float32Array(stars.length * 3), col = new Float32Array(stars.length * 3);
+  stars.forEach((s, i) => { pos.set([s.x, -100, s.y], i * 3); const a = s.a * 1.25; col.set([0.91 * a, 0.96 * a, a], i * 3); });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  K3.stars = new THREE.Points(g, new THREE.PointsMaterial({ size: 1.6 * DPR, sizeAttenuation: false, vertexColors: true }));
+  K3.scene.add(K3.stars);
+}
+// a lumpy stone: an icosahedron whose shared corners are pushed in or out by the same random amount
+function rockGeo(r) {
+  const g = new THREE.IcosahedronGeometry(1, r.size === 1 ? 0 : 1), p = g.attributes.position, bump = new Map();
+  for (let i = 0; i < p.count; i++) {
+    const k = p.getX(i).toFixed(3) + p.getY(i).toFixed(3) + p.getZ(i).toFixed(3);
+    if (!bump.has(k)) bump.set(k, 0.74 + Math.random() * 0.34);
+    const m = bump.get(k) * r.r;
+    p.setXYZ(i, p.getX(i) * m, p.getY(i) * m * 0.8, p.getZ(i) * m);
+  }
+  g.computeVertexNormals();
+  return g;
+}
+function rockModel(r) {
+  const geo = rockGeo(r), edges = new THREE.EdgesGeometry(geo, 25), copies = [];
+  for (let i = 0; i < 4; i++) {
+    const m = new THREE.Mesh(geo, K3.rockMat); m.add(new THREE.LineSegments(edges, K3.edgeMat));
+    m.visible = false; K3.scene.add(m); copies.push(m);
+  }
+  return { copies, geo, edges, ax: rand(-1, 1), az: rand(-1, 1) };
+}
+function shipModel() {
+  // nose along +x, like the 2D outline [[13,0],[-9,-8],[-6,0],[-9,8]]
+  const v = { N: [13, 0, 0], L: [-9, 0, -8], R: [-9, 0, 8], T: [-6, 0, 0], U: [-3, 4.5, 0], D: [-3, -2.5, 0] };
+  const tri = [['N', 'U', 'L'], ['N', 'R', 'U'], ['U', 'T', 'L'], ['U', 'R', 'T'], ['N', 'L', 'D'], ['N', 'D', 'R'], ['D', 'L', 'T'], ['D', 'T', 'R']];
+  const pos = []; for (const t of tri) for (const k of t) pos.push(...v[k]);
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ color: 0xdfe8f4, roughness: 0.45, metalness: 0.35, flatShading: true, side: THREE.DoubleSide });
+  const edges = new THREE.EdgesGeometry(geo, 1), emat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.55 });
+  const flameGeo = new THREE.ConeGeometry(2.6, 1, 6); flameGeo.rotateZ(Math.PI / 2); flameGeo.translate(-0.5, 0, 0);
+  const flameMat = new THREE.MeshBasicMaterial({ color: 0xffb27a, transparent: true, opacity: 0.9 });
+  const copies = [];
+  for (let i = 0; i < 4; i++) {
+    const g = new THREE.Group(), roll = new THREE.Group(); g.add(roll);
+    roll.add(new THREE.Mesh(geo, mat)); roll.add(new THREE.LineSegments(edges, emat));
+    const f = new THREE.Mesh(flameGeo, flameMat); f.position.x = -6; roll.add(f); g.userData = { roll, flame: f };
+    g.visible = false; K3.scene.add(g); copies.push(g);
+  }
+  return { g: new THREE.Group(), copies };
+}
+function ufoModel(u) {
+  const g = new THREE.Group(), w = u.w, h = u.h;
+  const hull = new THREE.MeshStandardMaterial({ color: 0x8a2a24, roughness: 0.5, metalness: 0.4, flatShading: true });
+  const band = new THREE.MeshStandardMaterial({ color: 0xff5a4a, emissive: 0xff3a2a, emissiveIntensity: 0.9, flatShading: true });
+  const lo = new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 4, h * 0.5, 14), hull); lo.position.y = 0; g.add(lo);
+  const ring = new THREE.Mesh(new THREE.CylinderGeometry(w / 2 + 0.6, w / 2 + 0.6, h * 0.18, 14), band); ring.position.y = h * 0.25; g.add(ring);
+  const hi = new THREE.Mesh(new THREE.CylinderGeometry(w / 4, w / 2, h * 0.4, 14), hull); hi.position.y = h * 0.5; g.add(hi);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(w / 4.2, 12, 6, 0, TAU, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xffb0a8, emissive: 0x803028, roughness: 0.2, metalness: 0.1 }));
+  dome.position.y = h * 0.7; g.add(dome);
+  const copies = [g]; for (let i = 0; i < 3; i++) copies.push(g.clone());
+  for (const c of copies) { c.visible = false; K3.scene.add(c); }
+  return { copies };
+}
+// place up to four copies of an object so it shows on both sides of a wrapped edge
+function placeWrapped(copies, x, y, r, fn) {
+  const xs = [0], ys = [0];
+  if (x < r) xs.push(W); if (x > W - r) xs.push(-W);
+  if (y < r) ys.push(GH); if (y > GH - r) ys.push(-GH);
+  let i = 0;
+  for (const dx of xs) for (const dy of ys) { const c = copies[i++]; c.visible = true; c.position.set(x + dx, 0, y + dy); if (fn) fn(c); }
+  for (; i < copies.length; i++) copies[i].visible = false;
+}
+function syncMap(map, list, make) {
+  const seen = new Set();
+  for (const o of list) { if (!map.has(o)) map.set(o, make(o)); seen.add(o); }
+  for (const [o, m] of map) if (!seen.has(o)) { for (const c of m.copies) K3.scene.remove(c); if (m.geo) { m.geo.dispose(); m.edges.dispose(); } map.delete(o); }
+}
+function render3() {
+  syncMap(K3.rocks, rocks, rockModel);
+  for (const r of rocks) {
+    const m = K3.rocks.get(r);
+    placeWrapped(m.copies, r.x, r.y, r.r, c => c.rotation.set(clock * 0.6 * m.ax, -r.rot, clock * 0.6 * m.az));
+  }
+  syncMap(K3.ufos, ufos, ufoModel);
+  for (const u of ufos) placeWrapped(K3.ufos.get(u).copies, u.x, u.y, u.w, c => { c.rotation.set(0, 0, 0); c.rotateX(0.95); c.rotateY(clock * 2.4); });
+  const sc = K3.ship.copies;
+  const show = ship && ship.alive && !(ship.inv > 0 && Math.floor(clock * 10) % 2 === 0);
+  if (show) {
+    // bank into turns
+    let dA = ship.a - (K3.lastA == null ? ship.a : K3.lastA); K3.lastA = ship.a;
+    dA = Math.atan2(Math.sin(dA), Math.cos(dA));
+    K3.bank = (K3.bank || 0) + (clamp(dA * 10, -0.7, 0.7) - (K3.bank || 0)) * 0.2;
+    placeWrapped(sc, ship.x, ship.y, 14, c => {
+      c.rotation.set(0, -ship.a, 0);
+      c.userData.roll.rotation.x = K3.bank;
+      const f = c.userData.flame, on = ship.thrusting && ship.flame < 1;
+      f.visible = on; if (on) f.scale.set(8 + Math.random() * 5, 1, 1);
+    });
+    K3.engine.intensity = ship.thrusting ? 1.4 : 0;
+    K3.engine.position.set(ship.x - Math.cos(ship.a) * 12, 10, ship.y - Math.sin(ship.a) * 12);
+  } else { for (const c of sc) c.visible = false; K3.engine.intensity = 0; }
+  K3.renderer.render(K3.scene, K3.camera);
 }
 
 /* ---------- input ---------- */
@@ -564,6 +705,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 window.addEventListener('resize', resize);
+initT3();
 resize();
 toMenu();
 setMuteUI();
