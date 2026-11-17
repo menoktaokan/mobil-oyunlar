@@ -143,6 +143,7 @@ img,canvas,svg{-webkit-user-drag:none}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -168,6 +169,7 @@ function resize() {
   PH = Math.max(112, Math.round(H * 0.2)); GH = H - PH; PY = GH - 24;
   $('launchBtn').style.top = ((GH + PH * 0.62) * S) + 'px';
   buildBg(); buildPanel();
+  if (K3) sizeT3();
   if (P) { P.y = PY; for (const b of balls) if (b.held) b.y = PY - 9; }
 }
 
@@ -592,9 +594,24 @@ function drawPanel() {
   }
 }
 function render() {
+  const k3 = initT3();
   ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
   ctx.save();
   if (shake > 0) ctx.translate(rand(-shake, shake) * 0.4, rand(-shake, shake) * 0.4);
+  if (k3) {
+    render3();
+    ctx.clearRect(-20, -20, W + 40, H + 40);
+    // the 3D tiles flash white on a hit; capsule letters ride on the pills
+    for (const br of bricks) if (br.alive && br.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,0.55)'; rr(ctx, br.x, br.y - lift(TH), br.w, br.h, 2.5); ctx.fill(); }
+    for (const c of caps) txt(c.k, c.x, c.y + 4 - lift(13), '800 11px "Baloo 2", sans-serif', c.k === 'K' ? '#f3efe6' : '#13265c', 'center');
+    ctx.fillStyle = '#ff8a7a';
+    for (const l of lasers) ctx.fillRect(l.x - 1, l.y - 7 - lift(6), 2, 8);
+    for (const b of balls) {
+      const fire = eff.fire > 0;
+      b.trail.forEach((p, i) => { ctx.globalAlpha = (i + 1) / (b.trail.length + 1) * 0.35; ctx.fillStyle = fire ? '#ffb347' : '#f3efe6'; ctx.beginPath(); ctx.arc(p.x, p.y - lift(b.r), b.r * (0.5 + i / 12), 0, TAU); ctx.fill(); });
+    }
+    ctx.globalAlpha = 1;
+  } else {
   ctx.drawImage(bg, 0, 0, W, GH);
   for (const br of bricks) {
     if (!br.alive) continue;
@@ -618,6 +635,7 @@ function render() {
     const g = ctx.createRadialGradient(b.x - 1.5, b.y - 1.5, 0.5, b.x, b.y, b.r);
     g.addColorStop(0, '#ffffff'); g.addColorStop(1, fire ? '#ff7a2f' : '#d9a441');
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.fill();
+  }
   }
   for (const p of parts) {
     const a = clamp(p.life / p.max, 0, 1);
@@ -644,6 +662,127 @@ function render() {
     txt(banner.b, W / 2, y + 15, '700 12px Nunito, sans-serif', '#d9a441', 'center');
     ctx.globalAlpha = 1;
   }
+}
+
+/* ---------- 3D view (Three.js) ----------
+   Orthographic camera tilted back from straight down: a ground point at game (x, y) lands on the same screen point
+   as in 2D, so the ball physics and the panel stay in game units. Tiles are glazed blocks that keep their painted
+   tops; the ball, paddle and capsules are solid. The wooden panel, HUD and effects stay on the 2D canvas. */
+const TILT = 0.5, COSV = Math.cos(TILT), SINV = Math.sin(TILT), TH = 6;   // TH: tile height
+const wz = y => y / COSV, lift = h => h * SINV;
+let K3 = null;
+function initT3() {
+  if (K3 !== null) return K3;
+  K3 = false;
+  if (typeof THREE === 'undefined') return K3;
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setClearColor(0x0f1f4f, 1);
+    const el = renderer.domElement; el.style.position = 'absolute'; el.style.left = '0'; el.style.top = '0';
+    wrap.insertBefore(el, cv); cv.style.position = 'relative';
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(0, W, 0, -H, -1000, 1000);
+    camera.position.set(0, 500 * COSV, 500 * SINV); camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0);
+    scene.add(new THREE.AmbientLight(0xc8d4ff, 0.5));
+    scene.add(new THREE.HemisphereLight(0xfff4e0, 0x1a2a60, 0.35));
+    const key = new THREE.DirectionalLight(0xfff1d8, 0.75); key.position.set(-120, 300, 80); scene.add(key);
+    const G = { box: new THREE.BoxGeometry(1, 1, 1), sph: new THREE.SphereGeometry(1, 20, 14), cyl: new THREE.CylinderGeometry(1, 1, 1, 16) };
+    K3 = { renderer, scene, camera, G, tiles: {} };
+    build3();
+  } catch (e) { K3 = false; }
+  return K3;
+}
+function sizeT3() {
+  if (!K3) return;
+  K3.renderer.setPixelRatio(DPR);
+  K3.renderer.setSize(Math.round(W * S), Math.round(H * S));
+  const c = K3.camera; c.left = 0; c.right = W; c.top = 0; c.bottom = -H; c.updateProjectionMatrix();
+  // floor: the girih background, laid flat
+  if (K3.floor) { K3.scene.remove(K3.floor); K3.floor.material.map.dispose(); }
+  const t = new THREE.CanvasTexture(bg); t.anisotropy = 4;
+  K3.floor = new THREE.Mesh(new THREE.PlaneGeometry(W, wz(GH)), new THREE.MeshStandardMaterial({ map: t, roughness: 1 }));
+  K3.floor.rotation.x = -Math.PI / 2; K3.floor.position.set(W / 2, 0, wz(GH / 2)); K3.scene.add(K3.floor);
+  // frame: side walls and the top band, raised
+  for (const m of K3.frame || []) K3.scene.remove(m);
+  const navy = new THREE.MeshStandardMaterial({ color: 0x0b1638, roughness: 0.6 }), gold = new THREE.MeshStandardMaterial({ color: 0xd9a441, roughness: 0.35, metalness: 0.6 });
+  const box = (mat, x0, x1, y0, y1, h, y = 0) => { const m = new THREE.Mesh(K3.G.box, mat); m.scale.set(x1 - x0, h, wz(y1 - y0)); m.position.set((x0 + x1) / 2, y + h / 2, wz((y0 + y1) / 2)); K3.scene.add(m); return m; };
+  K3.frame = [box(navy, 0, WALL, HUD, GH, 10), box(navy, W - WALL, W, HUD, GH, 10), box(navy, 0, W, 0, HUD, 10),
+              box(gold, WALL - 2, WALL, HUD, GH, 1, 10), box(gold, W - WALL, W - WALL + 2, HUD, GH, 1, 10), box(gold, 0, W, HUD - 2, HUD, 1, 10)];
+}
+function build3() {
+  const G = K3.G, sc = K3.scene;
+  // one instanced mesh per tile kind: painted top, darker glazed sides
+  for (const k of [...Object.keys(BT), 'S1']) {
+    const T = BT[k === 'S1' ? 'S' : k], tex = new THREE.CanvasTexture(TILE[k]); tex.anisotropy = 4;
+    const glaze = k === 'G' ? { roughness: 0.35, metalness: 0.3 } : { roughness: 0.3, metalness: 0.05 };
+    const side = new THREE.MeshStandardMaterial(Object.assign({ color: T.lo }, glaze));
+    const top = new THREE.MeshStandardMaterial(Object.assign({ map: tex }, glaze));
+    const m = new THREE.InstancedMesh(G.box, [side, side, top, side, side, side], 160);
+    m.count = 0; m.frustumCulled = false; sc.add(m); K3.tiles[k] = m;
+  }
+  // ball
+  K3.ballMat = new THREE.MeshStandardMaterial({ color: 0xf2c662, roughness: 0.3, metalness: 0.25, emissive: 0x3a2400 });
+  K3.balls = [];
+  // paddle: cream body, rounded ends, a blue inlay on top
+  const pg = new THREE.Group();
+  const cream = new THREE.MeshStandardMaterial({ color: 0xf3efe6, roughness: 0.45 });
+  const body = new THREE.Mesh(G.box, cream); pg.add(body);
+  const capL = new THREE.Mesh(G.cyl, cream), capR = new THREE.Mesh(G.cyl, cream); pg.add(capL, capR);
+  const inlay = new THREE.Mesh(G.box, new THREE.MeshStandardMaterial({ color: 0x2346a8, roughness: 0.35 })); pg.add(inlay);
+  const goldM = new THREE.MeshStandardMaterial({ color: 0xd9a441, roughness: 0.3, metalness: 0.7 });
+  const bandL = new THREE.Mesh(G.box, goldM), bandR = new THREE.Mesh(G.box, goldM); pg.add(bandL, bandR);
+  const gunL = new THREE.Mesh(G.box, new THREE.MeshStandardMaterial({ color: 0xe2533c, roughness: 0.4 })), gunR = gunL.clone(); pg.add(gunL, gunR);
+  sc.add(pg);
+  K3.pad = { g: pg, body, capL, capR, inlay, bandL, bandR, gunL, gunR, cream };
+  K3.caps = [];
+}
+function ballMesh(i) {
+  while (K3.balls.length <= i) { const m = new THREE.Mesh(K3.G.sph, K3.ballMat); K3.scene.add(m); K3.balls.push(m); }
+  return K3.balls[i];
+}
+function capMesh(i) {
+  while (K3.caps.length <= i) {
+    const g = new THREE.Group(), mat = new THREE.MeshStandardMaterial({ roughness: 0.35 });
+    const mid = new THREE.Mesh(K3.G.cyl, mat); mid.rotation.z = Math.PI / 2; mid.scale.set(6.5, 13, 6.5); g.add(mid);
+    const e1 = new THREE.Mesh(K3.G.sph, mat); e1.scale.setScalar(6.5); e1.position.x = -6.5; g.add(e1);
+    const e2 = e1.clone(); e2.position.x = 6.5; g.add(e2);
+    g.userData.mat = mat; K3.scene.add(g); K3.caps.push(g);
+  }
+  return K3.caps[i];
+}
+const _m4 = typeof THREE !== 'undefined' ? new THREE.Matrix4() : null;
+function render3() {
+  // tiles
+  const n = {}; for (const k in K3.tiles) n[k] = 0;
+  for (const br of bricks) {
+    if (!br.alive) continue;
+    const k = br.type === 'S' && br.hp < (lvl >= 5 ? 3 : 2) ? 'S1' : br.type, m = K3.tiles[k];
+    _m4.makeScale(br.w, TH, wz(br.h)); _m4.setPosition(br.x + br.w / 2, TH / 2, wz(br.y + br.h / 2));
+    m.setMatrixAt(n[k]++, _m4);
+  }
+  for (const k in K3.tiles) { K3.tiles[k].count = n[k]; K3.tiles[k].instanceMatrix.needsUpdate = true; }
+  // balls
+  const fire = eff.fire > 0;
+  K3.ballMat.emissive.set(fire ? 0xff5a10 : 0x3a2400);
+  balls.forEach((b, i) => { const m = ballMesh(i); m.visible = true; m.scale.setScalar(b.r); m.position.set(b.x, b.r, wz(b.y)); });
+  for (let i = balls.length; i < K3.balls.length; i++) K3.balls[i].visible = false;
+  // paddle
+  const p = K3.pad, pw = paddleW(), h = 7, d = wz(10), shortP = eff.short > 0;
+  p.g.position.set(P ? P.x : W / 2, 0, wz(PY));
+  p.body.scale.set(pw - 10, h, d); p.body.position.y = h / 2;
+  for (const [c, s] of [[p.capL, -1], [p.capR, 1]]) { c.scale.set(d / 2, h, d / 2); c.position.set(s * (pw / 2 - 5), h / 2, 0); }
+  p.cream.color.set(shortP ? 0x9a9aae : 0xf3efe6);
+  p.inlay.scale.set(pw - 14, 1, wz(4)); p.inlay.position.y = h + 0.3;
+  p.inlay.material.color.set(eff.sticky > 0 ? 0xf0c862 : 0x2346a8);
+  for (const [b, s] of [[p.bandL, -1], [p.bandR, 1]]) { b.scale.set(3, h + 0.4, d + 0.4); b.position.set(s * (pw / 2 - 6), h / 2, 0); }
+  const gun = eff.laser > 0;
+  for (const [g, s] of [[p.gunL, -1], [p.gunR, 1]]) { g.visible = gun; g.scale.set(4, 5, wz(5)); g.position.set(s * (pw / 2 - 5), h + 2.5, -wz(2)); }
+  p.g.visible = !!P;
+  // capsules
+  caps.forEach((c, i) => { const g = capMesh(i); g.visible = true; g.userData.mat.color.set(c.col); g.position.set(c.x, 7, wz(c.y)); g.rotation.x = levelT * 4 + i; });
+  for (let i = caps.length; i < K3.caps.length; i++) K3.caps[i].visible = false;
+  K3.renderer.domElement.style.transform = shake > 0 ? `translate(${rand(-shake, shake) * 0.4 * S}px,${rand(-shake, shake) * 0.4 * S}px)` : '';
+  K3.renderer.render(K3.scene, K3.camera);
 }
 
 /* ---------- input: the control panel ---------- */
@@ -765,6 +904,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 window.addEventListener('resize', resize);
+initT3();
 resize();
 toMenu();
 setMuteUI();
