@@ -17,16 +17,16 @@ img,canvas,svg{-webkit-user-drag:none}
   color-scheme:dark;
 }
 html,body{height:100%}
-body{background:var(--panel);color:var(--ink);font-family:var(--pixel);overflow:hidden;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+body{background:var(--panel);color:var(--ink);font-family:var(--pixel);-webkit-font-smoothing:none;font-smooth:never;text-rendering:optimizeSpeed;overflow:hidden;touch-action:manipulation;user-select:none;-webkit-user-select:none}
 #wrap{height:100%;display:flex;flex-direction:column;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:8px;gap:8px;box-sizing:border-box}
-.bar{display:flex;justify-content:space-between;align-items:center;font-size:10px;gap:8px;font-variant-numeric:tabular-nums}
+.bar{display:flex;justify-content:space-between;align-items:center;font-size:var(--f10,10px);gap:8px;font-variant-numeric:tabular-nums}
 .bar b{color:var(--amber);font-weight:400}
 #stage{flex:1;min-height:0;position:relative;border-radius:6px;overflow:hidden;box-shadow:0 0 0 2px #000 inset}
 canvas{display:block;width:100%;height:100%;cursor:crosshair}
-#hud{display:flex;justify-content:space-between;align-items:center;font-size:9px;gap:10px}
+#hud{display:flex;justify-content:space-between;align-items:center;font-size:var(--f9,9px);gap:10px}
 .ammo{display:flex;align-items:center;gap:10px}
 .shells{display:flex;gap:6px}
-#sb{color:var(--amber);font-size:10px;opacity:0;font-variant-numeric:tabular-nums}
+#sb{color:var(--amber);font-size:var(--f10,10px);opacity:0;font-variant-numeric:tabular-nums}
 #sb.pop{animation:sbpop 1.4s ease-out}
 @keyframes sbpop{0%{opacity:0;transform:translateY(6px)}15%{opacity:1;transform:translateY(0)}75%{opacity:1}100%{opacity:0;transform:translateY(-6px)}}
 @media (prefers-reduced-motion:reduce){#sb.pop{animation:none;opacity:1}}
@@ -36,22 +36,33 @@ canvas{display:block;width:100%;height:100%;cursor:crosshair}
 .t{width:10px;height:10px;background:#3a4258}
 .t.hit{background:var(--hit)} .t.miss{background:var(--miss)} .t.now{outline:1px solid var(--ink)}
 #overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(10,14,28,.62);text-align:center;padding:16px}
-#overlay h1{font-size:22px;color:var(--amber);margin:0;line-height:1.4;text-shadow:3px 3px 0 #000;text-wrap:balance}
-#overlay p{font-size:9px;line-height:1.9;margin:0;max-width:30ch}
-button{font-family:var(--pixel);font-size:12px;background:var(--amber);color:#1a1205;border:0;padding:14px 20px;border-radius:4px;box-shadow:0 4px 0 #8a5a10;cursor:pointer}
+#overlay h1,#pauseOv h1{font-size:var(--f22,22px);color:var(--amber);margin:0;line-height:1.4;text-shadow:3px 3px 0 #000;text-wrap:balance}
+#overlay p{font-size:var(--f9,9px);line-height:1.9;margin:0;max-width:30ch}
+button{font-family:var(--pixel);font-size:var(--f12,12px);background:var(--amber);color:#1a1205;border:0;padding:14px 20px;border-radius:4px;box-shadow:0 4px 0 #8a5a10;cursor:pointer}
 button:active{transform:translateY(3px);box-shadow:0 1px 0 #8a5a10}
 button:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+#pz{font-size:var(--f10,10px);padding:6px 9px;background:transparent;color:var(--ink);box-shadow:0 0 0 2px var(--ink) inset;line-height:1}
+#pz:active{transform:none;box-shadow:0 0 0 2px var(--amber) inset}
+#pauseOv{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(10,14,28,.72);text-align:center;padding:16px}
+#pauseOv h1{color:var(--amber);margin:0;line-height:1.4;text-shadow:3px 3px 0 #000}
+#pauseOv .ghost{background:transparent;color:var(--ink);box-shadow:0 0 0 2px var(--ink) inset}
 </style>
 
 <div id="wrap">
-  <div class="bar"><span>TUR <b id="round">1</b></span><span>PUAN <b id="score">0</b></span><span>REKOR <b id="best">0</b></span></div>
+  <div class="bar"><span>TUR <b id="round">1</b></span><span>PUAN <b id="score">0</b></span><span>REKOR <b id="best">0</b></span><button id="pz" type="button" aria-label="Duraklat" hidden>II</button></div>
   <div id="stage">
     <canvas id="c"></canvas>
     <div id="overlay">
       <h1>SAZLIK<br>AVI</h1>
       <p>Uçan kuşlara dokun. Her kuş için 3 fişeğin var, artan fişek puan getirir. Turu geçmek için 5 kuştan 4'ünü vur. Üst üste 3 kuş kaçarsa oyun biter.</p>
       <button id="go" type="button">BAŞLA</button>
-      <button id="hub" type="button" data-hub hidden style="font-size:9px;padding:10px 14px;background:transparent;color:var(--ink);box-shadow:0 0 0 2px var(--ink) inset">OYUNLAR</button>
+      <button id="hub" type="button" data-hub hidden style="font-size:var(--f9,9px);padding:10px 14px;background:transparent;color:var(--ink);box-shadow:0 0 0 2px var(--ink) inset">OYUNLAR</button>
+    </div>
+    <div id="pauseOv" hidden>
+      <h1>MOLA</h1>
+      <button id="resume" type="button">DEVAM</button>
+      <button id="restart" type="button" class="ghost">BAŞTAN</button>
+      <button type="button" class="ghost" data-hub hidden>OYUNLAR</button>
     </div>
   </div>
   <div id="hud">
@@ -66,7 +77,10 @@ const cv=document.getElementById('c'),cx=cv.getContext('2d');
 const $=id=>document.getElementById(id);
 const overlay=$('overlay'),btn=$('go');
 let W=0,H=0,DPR=1;
-function fit(){const r=$('stage').getBoundingClientRect();DPR=Math.min(2,window.devicePixelRatio||1);W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;cx.setTransform(DPR,0,0,DPR,0,0);}
+// Press Start 2P is drawn on an 8-pixel grid: keep every size a whole number of screen pixels per font pixel
+const crisp=(px,d)=>Math.max(1,Math.round(px*d/8))*8/d;
+function fonts(){const d=window.devicePixelRatio||1,st=document.documentElement.style;for(const n of [9,10,12,22])st.setProperty('--f'+n,crisp(n,d)+'px');}
+function fit(){fonts();const r=$('stage').getBoundingClientRect();DPR=Math.min(2,window.devicePixelRatio||1);W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;cx.setTransform(DPR,0,0,DPR,0,0);}
 addEventListener('resize',fit);fit();
 
 let best=0;try{best=+localStorage.getItem('sazlik-best')||0}catch(e){}
@@ -80,6 +94,10 @@ function bang(){if(!ac)return;const n=ac.sampleRate*.18,b=ac.createBuffer(1,n,ac
 // --- durum ---
 const G={state:'menu',round:1,score:0,birdIdx:0,results:[],shots:3,bird:null,flash:0,msg:'',msgT:0,particles:[],missStreak:0};
 const BIRDS_PER_ROUND=5,NEED=4,SHELL_PTS=300;
+// game-time timers: they wait while the game is paused
+let timers=[];
+const later=(fn,ms)=>timers.push({fn,t:ms/1000});
+function tickTimers(dt){if(!timers.length)return;const due=[];timers=timers.filter(x=>(x.t-=dt)>0||(due.push(x),false));due.forEach(x=>x.fn());}
 
 function renderHud(){
   $('round').textContent=G.round;$('score').textContent=G.score;
@@ -104,7 +122,7 @@ function spawn(){
 function start(){
   if(!ac){try{ac=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}
   if(ac&&ac.state==='suspended')ac.resume();
-  G.round=1;G.score=0;G.missStreak=0;newRound();overlay.hidden=true;
+  G.round=1;G.score=0;G.missStreak=0;timers=[];newRound();overlay.hidden=true;pz.hidden=false;
 }
 function newRound(){G.birdIdx=0;G.results=[];G.state='play';say('TUR '+G.round);spawn();}
 function say(m){G.msg=m;G.msgT=1.4;}
@@ -114,15 +132,15 @@ function endBird(res){
   G.results[G.birdIdx]=res;G.birdIdx++;renderHud();
   G.state='pause';
   G.missStreak=res==='miss'?G.missStreak+1:0;
-  if(G.missStreak>=3){setTimeout(gameOver,1100);return;}
-  setTimeout(()=>{
+  if(G.missStreak>=3){later(gameOver,1100);return;}
+  later(()=>{
     if(G.birdIdx>=BIRDS_PER_ROUND){
       const hits=G.results.filter(r=>r==='hit').length;
       if(hits>=NEED){
         const bonus=hits===BIRDS_PER_ROUND?5000:0;G.score+=bonus;renderHud();
-        say(bonus?'MÜKEMMEL! +5000':'TUR GEÇİLDİ');tone(523,.12);setTimeout(()=>tone(784,.2),130);
-        G.round++;setTimeout(newRound,1500);
-      } else {say('TUR TEKRAR');tone(262,.25,'triangle',.08,-60);setTimeout(newRound,1500);}
+        say(bonus?'MÜKEMMEL! +5000':'TUR GEÇİLDİ');tone(523,.12);later(()=>tone(784,.2),130);
+        G.round++;later(newRound,1500);
+      } else {say('TUR TEKRAR');tone(262,.25,'triangle',.08,-60);later(newRound,1500);}
     } else {G.state='play';spawn();}
   },res==='hit'?900:1100);
 }
@@ -132,13 +150,22 @@ function gameOver(){
   if(G.score>best){best=G.score;try{localStorage.setItem('sazlik-best',best)}catch(e){}$('best').textContent=best;}
   overlay.querySelector('h1').innerHTML='OYUN<br>BİTTİ';
   overlay.querySelector('p').textContent=`Üst üste 3 kuş kaçtı. ${G.round}. turda kaldın. Puan: ${G.score}`;
-  btn.textContent='TEKRAR';overlay.hidden=false;
+  btn.textContent='TEKRAR';overlay.hidden=false;pz.hidden=true;
 }
 
 btn.addEventListener('click',start);
+const pz=$('pz'),pauseOv=$('pauseOv');
+const running=()=>overlay.hidden&&G.state!=='over'&&G.state!=='menu';
+function pauseGame(){if(!running()||G.paused)return;G.paused=true;pauseOv.hidden=false;pz.hidden=true;}
+function resumeGame(){if(!G.paused)return;G.paused=false;pauseOv.hidden=true;pz.hidden=false;last=performance.now();}
+pz.addEventListener('click',pauseGame);
+$('resume').addEventListener('click',resumeGame);
+$('restart').addEventListener('click',()=>{G.paused=false;pauseOv.hidden=true;timers=[];G.particles=[];G.bird=null;start();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)pauseGame();});
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(k==='p'||k==='escape'){G.paused?resumeGame():pauseGame();}});
 
 cv.addEventListener('pointerdown',e=>{
-  if(G.state!=='play'||G.shots<=0)return;
+  if(G.paused||G.state!=='play'||G.shots<=0)return;
   const r=cv.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top;
   G.shots--;G.flash=.08;bang();renderHud();
   const b=G.bird;
@@ -149,7 +176,7 @@ cv.addEventListener('pointerdown',e=>{
     G.score+=(b.pal.pts*(1+(G.round-1)*.1)|0)+shellB;renderHud();
     if(shellB)showShellBonus(shellB);
     for(let i=0;i<14;i++)G.particles.push({x:b.x,y:b.y,vx:(Math.random()-.5)*220,vy:(Math.random()-.8)*200,l:.8,c:i%2?b.pal.body:b.pal.wing});
-    tone(880,.08,'square',.06);setTimeout(()=>tone(220,.5,'triangle',.08,-150),120);
+    tone(880,.08,'square',.06);later(()=>tone(220,.5,'triangle',.08,-150),120);
   } else if(G.shots===0&&b&&b.alive){
     b.escaping=true;say('KAÇTI!');
   }
@@ -196,7 +223,8 @@ function drawBird(b,t){
 
 let last=performance.now();
 function loop(now){
-  const dt=Math.min(.05,(now-last)/1000);last=now;const t=now/1000;
+  const dt=G.paused?0:Math.min(.05,(now-last)/1000);last=now;if(!G.paused)G.clock=(G.clock||0)+dt;const t=G.clock||0;
+  tickTimers(dt);
   drawBg(t);
   const b=G.bird;
   if(b&&(G.state==='play'||G.state==='pause')){
@@ -223,7 +251,7 @@ function loop(now){
   G.particles.forEach(p=>{p.vy+=400*dt;p.x+=p.vx*dt;p.y+=p.vy*dt;cx.fillStyle=p.c;cx.globalAlpha=Math.min(1,p.l*2);cx.fillRect(p.x,p.y,4,4);});cx.globalAlpha=1;
   drawReeds(t);
   if(G.flash>0){G.flash-=dt;cx.fillStyle='rgba(255,246,228,.35)';cx.fillRect(0,0,W,H);}
-  if(G.msgT>0){G.msgT-=dt;cx.font=`${Math.max(14,W*.045)|0}px "Press Start 2P", monospace`;cx.textAlign='center';cx.fillStyle='#000';cx.fillText(G.msg,W/2+3,H*.42+3);cx.fillStyle='#ffc94a';cx.fillText(G.msg,W/2,H*.42);}
+  if(G.msgT>0){if(!G.paused)G.msgT-=dt;const fs=crisp(Math.max(14,W*.045),DPR),mx=Math.round(W/2*DPR)/DPR,my=Math.round(H*.42*DPR)/DPR,o=Math.round(3*DPR)/DPR;cx.font=`${fs}px "Press Start 2P", monospace`;cx.textAlign='center';cx.fillStyle='#000';cx.fillText(G.msg,mx+o,my+o);cx.fillStyle='#ffc94a';cx.fillText(G.msg,mx,my);}
   requestAnimationFrame(loop);
 }
 renderHud();requestAnimationFrame(loop);
