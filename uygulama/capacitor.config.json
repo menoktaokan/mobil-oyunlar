@@ -1,0 +1,17 @@
+{
+  "appId": "io.github.menoktaokan.oyunlar",
+  "appName": "Mobil Oyunlar",
+  "webDir": "www",
+  "backgroundColor": "#141517",
+  "android": {
+    "backgroundColor": "#141517",
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover",
+      "style": "DARK"
+    }
+  }
+}

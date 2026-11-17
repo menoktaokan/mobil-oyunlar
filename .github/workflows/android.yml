@@ -1,0 +1,96 @@
+# Android uygulamasını derler.
+# Çıktılar "android-latest" sürümüne (Releases) konur:
+#   mobil-oyunlar-test.apk  -> telefona doğrudan kurup denemek için
+#   mobil-oyunlar.aab       -> Play Console'a yüklenecek paket (secret'lar tanımlıysa imzalı)
+name: Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'uygulama/**'
+      - '*/index.html'
+      - 'index.html'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      GH_TOKEN: ${{ github.token }}
+    defaults:
+      run:
+        working-directory: uygulama
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: uygulama/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Oyunları uygulamaya hazırla
+        run: |
+          npm ci --no-audit --no-fund
+          npm run sync
+
+      - name: Yükleme anahtarını aç
+        if: env.KEYSTORE_BASE64 != ''
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+
+      - name: Derle
+        working-directory: uygulama/android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace bundleRelease assembleDebug 2>&1 | tee "$RUNNER_TEMP/derleme.log"
+
+      - name: Çıktıları topla
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          cp android/app/build/outputs/bundle/release/app-release.aab "$RUNNER_TEMP/out/mobil-oyunlar.aab"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/out/mobil-oyunlar-test.apk"
+          if [ -n "$KEYSTORE_FILE" ]; then echo "imzali" > "$RUNNER_TEMP/out/imza.txt"; else echo "imzasiz" > "$RUNNER_TEMP/out/imza.txt"; fi
+          echo "${{ github.run_number }}" > "$RUNNER_TEMP/out/surum-kodu.txt"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mobil-oyunlar-${{ github.run_number }}
+          path: ${{ runner.temp }}/out
+
+      - name: Sürüm sayfasına koy
+        run: |
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest "$RUNNER_TEMP"/out/* \
+            --prerelease --target "${{ github.sha }}" \
+            --title "Android derlemesi #${{ github.run_number }}" \
+            --notes "Otomatik derleme. Test için mobil-oyunlar-test.apk, Play Console için mobil-oyunlar.aab."
+
+      - name: Hata kaydını paylaş
+        if: failure()
+        run: |
+          gh release delete android-hata --yes --cleanup-tag || true
+          [ -f "$RUNNER_TEMP/derleme.log" ] || echo "derleme adımına gelinmedi" > "$RUNNER_TEMP/derleme.log"
+          gh release create android-hata "$RUNNER_TEMP/derleme.log" --prerelease --target "${{ github.sha }}" --title "Son Android derleme hatası" --notes "Derleme kaydı"
