@@ -311,7 +311,7 @@ const TV = 55, VMAX = 235, K = 1.25;
 function newPlayer() { return { lane: 1, x: laneX(1), y: PY, from: 1, changeT: 99, inv: 0, spin: 0, alive: true }; }
 function reset() {
   P = newPlayer(); cars = []; parts = []; flakes = [];
-  v = 110; dist = 0; scroll = 0; rowAcc = 0; nextGap = 50; safe = 1; fuel = 100; lives = 3; bonus = 0; nearN = 0; combo = 0; comboT = 0;
+  v = 110; dist = 0; scroll = 0; rowAcc = 0; nextGap = 50; safe = 1; safeRun = 0; lastGap = 1; fuel = 100; lives = 3; bonus = 0; nearN = 0; combo = 0; comboT = 0;
   topV = 0; envIdx = 0; banner = null; flashT = 0; fuelAcc = 0; lowWarned = false; endT = 0; floats.length = 0;
   holes = []; holeAcc = 0; nextHole = rand(700, 1100); bumpT = 0;
   decor = []; for (let y = -20; y < RH + 20; y += 14) addDecor(y);
@@ -326,22 +326,29 @@ function addDecor(y) {
     const r = Math.random();
     const x = side ? rand(ROAD_R + 4, RW - 6) : rand(3, ROAD_L - 9);
     let type = r < 0.42 ? 'tree' : r < 0.7 ? 'bush' : r < 0.82 ? 'rock' : null;
-    if (type) decor.push({ type, x: Math.round(x), y, side });
+    if (type) decor.push({ type, x: Math.round(x), y, side, h: Math.random() });
   }
 }
 
 /* ---------- traffic ---------- */
 function laneFree(lane, y0, y1) { return !cars.some(c => c.lane === lane && c.y < y1 && c.y + c.h > y0); }
+// Every row leaves one lane open ("safe"). The open lane keeps moving, so no lane stays free for long, and the
+// distance to the next row is always long enough to slide across to the next open lane, even edge to edge in
+// the snow, if you react in time.
+let safeRun = 0, lastGap = 1;
 function spawnRow() {
   const L = loopN(), st = envIdx + L * ENV.length;
-  const edge = safe === 0 || safe === LANES - 1;
+  const cruise = Math.max(v, Math.min(VMAX, 110 + dist / 70)), rel = (cruise - TV) * K;
+  const soon = ENV[Math.floor((dist + 300) / STAGE_M) % ENV.length];
+  const lat = env().snow || soon.snow ? 70 : 150;                       // the player's sideways speed
   const others = [0, 1, 2, 3].filter(l => l !== safe);
   let n;
-  if (st >= 1 && Math.random() < Math.min(0.5, 0.25 + st * 0.03)) n = 3;              // a wall with one gap
+  if (st >= 1 && Math.random() < Math.min(0.62, 0.25 + st * 0.035)) n = 3;   // a wall with one gap
   else n = 1 + Math.floor(Math.random() * (st >= 2 ? 3 : 2));
-  // when the gap is on the edge, the middle lanes are the first to close
-  others.sort((x, y) => (edge ? (Math.abs(x - 1.5) - Math.abs(y - 1.5)) : 0) || Math.random() - 0.5);
-  const lanes = edge && Math.random() < 0.7 ? others.slice(0, n) : others.sort(() => Math.random() - 0.5).slice(0, n);
+  // fill lanes; a row that is not a wall still likes to block the lane you were just using
+  others.sort(() => Math.random() - 0.5);
+  if (n < 3 && lastGap !== safe && Math.random() < 0.75) { others.splice(others.indexOf(lastGap), 1); others.unshift(lastGap); }
+  const lanes = others.slice(0, n);
   let tallest = 15;
   for (const lane of lanes) {
     const truck = Math.random() < (st >= 1 ? 0.22 : 0.12);
@@ -351,16 +358,22 @@ function spawnRow() {
     cars.push(c);
     tallest = Math.max(tallest, spr.height);
   }
-  // the gap wanders, and likes to leave the middle
-  const mid = safe === 1 || safe === 2;
-  let ns = safe;
+  // where the next gap opens: it rarely stays put twice, and later on it jumps edge to edge
+  lastGap = safe;
+  const dirs = [-1, 1].filter(d => safe + d >= 0 && safe + d < LANES);
+  let ns;
   const r = Math.random();
-  if (mid && r < 0.45) ns = safe === 1 ? 0 : 3;
-  else if (r < 0.75) ns = safe + pick([-1, 1]);
-  safe = clamp(ns, 0, LANES - 1);
-  // spacing is planned for cruising speed, so a pothole or crash slowdown never packs rows too tightly
-  const rel = (Math.max(v, Math.min(VMAX, 110 + dist / 70)) - TV) * K;
-  nextGap = tallest + rel * (0.62 - Math.min(0.12, st * 0.02)) + 18;
+  if (st >= 3 && Math.random() < Math.min(0.4, (st - 2) * 0.07)) ns = safe <= 1 ? LANES - 1 : 0;
+  else if ((safe === 1 || safe === 2) && r < 0.4) ns = safe === 1 ? 0 : 3;
+  else if (r < 0.8 || safeRun >= 1) ns = safe + pick(dirs);
+  else ns = safe;
+  safeRun = ns === safe ? safeRun + 1 : 0;
+  // spacing: the usual rhythm, stretched whenever the slide to the next gap needs more room
+  const shift = Math.abs(ns - safe);
+  const rhythm = tallest + rel * (0.62 - Math.min(0.12, st * 0.02)) + 18;
+  const room = tallest + 14 + rel * (shift * LANE_W / lat + 0.3);
+  nextGap = Math.max(rhythm, room);
+  safe = ns;
   fuelAcc += 1;
   if (fuelAcc >= 7 + Math.floor(Math.random() * 4)) {
     fuelAcc = 0;
@@ -459,7 +472,8 @@ function update(dt) {
   for (const h of holes) {
     h.y += abs * dt;
     if (!h.hit && Math.abs(h.x - P.x) < 4 + h.w / 2 && h.y > P.y && h.y < P.y + 14 && P.alive) {
-      h.hit = true; v = Math.max(80, v * 0.78); bumpT = 0.3; sfx('bump');
+      h.hit = true; v = Math.max(80, v * 0.92); fuel = Math.max(0, fuel - 12); bumpT = 0.3; sfx('bump');
+      floatText(P.x, P.y - 8, '-YAKIT', '#ff3b3b');
       try { navigator.vibrate && navigator.vibrate(40); } catch (e) {}
       for (let i = 0; i < 6; i++) parts.push({ x: h.x + rand(-3, 3), y: h.y, vx: rand(-20, 20), vy: rand(-30, 5), life: 0.4, max: 0.4, col: '#6b6575' });
     }
@@ -698,7 +712,7 @@ function initT3() {
     // night: the player's headlights and the street lamps (always present, dark by day, so shaders never rebuild)
     const head = new THREE.SpotLight(0xfff1c8, 0, 0, 0.5, 0.5, 0.8); scene.add(head); scene.add(head.target);
     const plight = new THREE.PointLight(0xffe0ee, 0, 34, 1); scene.add(plight);
-    const lamps = []; for (let i = 0; i < 8; i++) { const l = new THREE.PointLight(0xffd99a, 0, 70, 1.2); scene.add(l); lamps.push(l); }
+    const lamps = []; for (let i = 0; i < 12; i++) { const l = new THREE.PointLight(0xffd99a, 0, 70, 1.2); scene.add(l); lamps.push(l); }
     // ground: the 2D road drawn into a texture every frame
     const gc = document.createElement('canvas'); gc.width = RW; gc.height = 64;
     const gtex = new THREE.CanvasTexture(gc); gtex.magFilter = THREE.NearestFilter; gtex.minFilter = THREE.NearestFilter; gtex.generateMipmaps = false;
@@ -836,7 +850,7 @@ function render3() {
   // decor
   let t = 0, l = 0, bu = 0, ro = 0;
   for (const d of decor) {
-    const h = hashN(d.x * 7 + Math.round(d.y + scroll) * 0.37), x = d.x + 3, z = wz(d.y + 5);
+    const h = d.h, x = d.x + 3, z = wz(Math.round(d.y) + 5);   // fixed size per tree; whole pixels like the road
     if (d.type === 'tree') {
       const s = 1.2 + h * 0.5;
       inst(K3.trunk, t++, x, 1.6 * s, z, 1.4, 3.2 * s, 1.4);
@@ -847,19 +861,18 @@ function render3() {
   }
   K3.trunk.count = t; K3.leaf.count = l; K3.bush.count = bu; K3.rock.count = ro;
   for (const m of [K3.trunk, K3.leaf, K3.bush, K3.rock]) m.instanceMatrix.needsUpdate = true;
-  // lamp posts every 48 px on both sides; lights on the nearest ones
-  let po = 0, lb = 0, li = 0;
-  const lo2 = Math.floor(scroll % 48);
-  for (let y = -96 + lo2; y < RH + 30; y += 48) {
-    for (const lx of [ROAD_L - 6, ROAD_R + 5]) {
-      const z = wz(y), arm = lx < ROAD_L ? 1 : -1;
-      inst(K3.post, po++, lx, 8, z, 1.6, 16, 1.6);
-      inst(K3.post, po++, lx + arm * 2.4, 15.8, z, 5, 1, 1.4);
-      inst(K3.bulb, lb++, lx + arm * 4.4, 15.1, z, 2.4, 0.9, 1.8);
-      if (li < K3.lamps.length && y > -30 && y < RH + 10) K3.lamps[li++].position.set(lx + arm * 5, 13, z);
-    }
+  // lamp posts, alternating sides; each lamp keeps the same light the whole way down, so nothing pops
+  let po = 0, lb = 0;
+  const LS = 40, lo2 = Math.floor(scroll % LS), base = Math.floor(scroll / LS);
+  for (const l of K3.lamps) l.position.set(-500, 0, 0);
+  for (let k = -3; k * LS + lo2 < RH + 30; k++) {
+    const y = k * LS + lo2, n = k - base, side = ((n % 2) + 2) % 2;
+    const lx = side ? ROAD_R + 5 : ROAD_L - 6, z = wz(y), arm = side ? -1 : 1;
+    inst(K3.post, po++, lx, 8, z, 1.6, 16, 1.6);
+    inst(K3.post, po++, lx + arm * 2.4, 15.8, z, 5, 1, 1.4);
+    inst(K3.bulb, lb++, lx + arm * 4.4, 15.1, z, 2.4, 0.9, 1.8);
+    if (y > -50 && y < RH + 24) K3.lamps[((n % K3.lamps.length) + K3.lamps.length) % K3.lamps.length].position.set(lx + arm * 5, 13, z);
   }
-  for (; li < K3.lamps.length; li++) K3.lamps[li].position.set(-500, 0, 0);
   K3.post.count = po; K3.bulb.count = lb; K3.post.instanceMatrix.needsUpdate = true; K3.bulb.instanceMatrix.needsUpdate = true;
   // traffic
   const seen = new Set();
@@ -873,7 +886,7 @@ function render3() {
       if (!c.fuel) for (const tl of m.userData.parts.tail) tl.material.emissiveIntensity = E.night ? 2.2 : 0.5;
     }
     seen.add(c);
-    m.position.set(c.x, 0, wz(c.y + c.h / 2));
+    m.position.set(Math.round(c.x), 0, wz(Math.round(c.y) + c.h / 2));
     if (c.fuel) { m.rotation.y = clock * 2; m.position.y = 1 + Math.sin(clock * 5) * 0.8; m.userData.ring.material.opacity = Math.floor(clock * 6) % 2 ? 0.15 : 0.6; m.userData.ring.position.y = 0.2 - m.position.y; continue; }
     // a lane change leans the car into it
     m.rotation.y = c.shift ? -(c.shift.to - c.shift.from) / 18 * 0.35 * Math.sin(Math.PI * Math.min(1, c.shift.t)) : 0;
@@ -888,7 +901,7 @@ function render3() {
   if (P) {
     const vx = P.x - (K3.lastPX == null ? P.x : K3.lastPX); K3.lastPX = P.x;
     const shake = bumpT > 0 ? (Math.floor(clock * 40) % 2 ? 0.6 : -0.6) : 0;
-    pm.position.set(P.x + shake, bumpT > 0 ? Math.abs(Math.sin(clock * 50)) * 0.8 : 0, wz(P.y + 7));
+    pm.position.set(Math.round(P.x) + shake, bumpT > 0 ? Math.abs(Math.sin(clock * 50)) * 0.8 : 0, wz(P.y + 7));
     pm.rotation.set(0, P.spin > 0 ? P.spin * 12 : -clamp(vx, -3, 3) * 0.09, clamp(vx, -3, 3) * 0.05);
     const bc = flashT > 0 ? '#ffffff' : '#ff3d7f'; if (K3.pcol !== bc) { K3.pcol = bc; pm.userData.body.material = MT(bc); }
     K3.head.position.set(P.x, 6, wz(P.y));
