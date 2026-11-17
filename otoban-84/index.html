@@ -305,7 +305,7 @@ let state = 'menu';
 let P = null, cars = [], parts = [], decor = [], flakes = [];
 let v = 110, dist = 0, scroll = 0, rowAcc = 0, nextGap = 60, safe = 1, fuel = 100, lives = 3, bonus = 0, nearN = 0, combo = 0, comboT = 0;
 let holes = [], holeAcc = 0, nextHole = 400, bumpT = 0;
-let fuelHit = 0, fuelShown = 100;
+let fuelHit = 0, fuelShown = 100, fuelGlow = 0;
 let topV = 0, envIdx = 0, banner = null, flashT = 0, clock = 0, fuelAcc = 0, lowWarned = false, decorAcc = 0, endT = 0, endReason = '';
 const TV = 55, VMAX = 235, K = 1.25;
 
@@ -313,13 +313,27 @@ function newPlayer() { return { lane: 1, x: laneX(1), y: PY, from: 1, changeT: 9
 function reset() {
   P = newPlayer(); cars = []; parts = []; flakes = [];
   v = 110; dist = 0; scroll = 0; rowAcc = 0; nextGap = 50; safe = 1; safeRun = 0; lastGap = 1; fuel = 100; lives = 3; bonus = 0; nearN = 0; combo = 0; comboT = 0;
-  fuelHit = 0; fuelShown = 100;
-  topV = 0; envIdx = 0; banner = null; flashT = 0; fuelAcc = 0; lowWarned = false; endT = 0; floats.length = 0;
+  fuelHit = 0; fuelShown = 100; fuelGlow = 0;
+  topV = 0; envIdx = 0; envFrom = 0; envT = 1; banner = null; flashT = 0; fuelAcc = 0; lowWarned = false; endT = 0; floats.length = 0;
   holes = []; holeAcc = 0; nextHole = rand(700, 1100); bumpT = 0;
   decor = []; for (let y = -20; y < RH + 20; y += 14) addDecor(y);
 }
 const score = () => Math.round(dist + bonus);
 const env = () => ENV[envIdx];
+// what the scene looks like: eases from the last stage into the new one over a few seconds
+let envFrom = 0, envT = 1, envCache = null;
+const hexRGB = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+const mixHex = (a, b, t) => { const x = hexRGB(a), y = hexRGB(b); return 'rgb(' + x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(',') + ')'; };
+function envView() {
+  if (envCache && envCache.i === envIdx && envCache.f === envFrom && envCache.t === envT) return envCache;
+  const A = ENV[envFrom], B = ENV[envIdx], t = envT >= 1 ? 1 : envT * envT * (3 - 2 * envT);
+  const f = k => (A[k] ? 1 : 0) + ((B[k] ? 1 : 0) - (A[k] ? 1 : 0)) * t;
+  const V = { i: envIdx, f: envFrom, t: envT, mix: t };
+  for (const k of ['grass', 'grass2', 'road', 'edge', 'line']) V[k] = mixHex(A[k], B[k], t);
+  V.nightK = f('night'); V.fogK = f('fog'); V.snowK = f('snow'); V.tintK = f('tint');
+  V.tint = B.tint || A.tint; V.night = V.nightK > 0.5; V.fog = V.fogK > 0.5; V.snow = V.snowK > 0.5;
+  return (envCache = V);
+}
 const loopN = () => Math.floor(dist / (STAGE_M * ENV.length));
 
 /* ---------- decor ---------- */
@@ -356,6 +370,7 @@ function spawnRow() {
     const truck = Math.random() < (st >= 1 ? 0.22 : 0.12);
     const spr = truck ? pick(SPR.trucks) : pick(SPR.cars);
     const c = { lane, x: laneX(lane), y: -spr.height - rand(0, 6), w: spr.width, h: spr.height, spr, truck, sig: 0, dir: 0, shift: null, passed: false };
+    c.k = truck ? rand(0.12, 0.34) : Math.random() < 0.4 ? 0 : rand(0.05, 0.14 + Math.min(0.14, st * 0.02));   // slower traffic closes in faster
     if (!truck && st >= 1 && lanes.length === 1 && Math.random() < (0.3 + Math.min(0.3, st * 0.05)) * 1.3) c.changer = true;
     cars.push(c);
     tallest = Math.max(tallest, spr.height);
@@ -371,7 +386,8 @@ function spawnRow() {
   else ns = safe;
   safeRun = ns === safe ? safeRun + 1 : 0;
   // spacing: the usual rhythm, stretched whenever the slide to the next gap needs more room
-  const shift = Math.abs(ns - safe);
+  // worst case: you may be in any lane this row leaves open, not just its marked gap
+  const shift = Math.max(...[0, 1, 2, 3].filter(l => !lanes.includes(l)).map(l => Math.abs(l - ns)));
   const rhythm = tallest + rel * (0.62 - Math.min(0.12, st * 0.02)) + 18;
   const room = tallest + 14 + rel * (shift * LANE_W / lat + 0.3);
   nextGap = Math.max(rhythm, room);
@@ -384,7 +400,9 @@ function spawnRow() {
 }
 function updCars(dt, rel) {
   for (const c of cars) {
-    c.y += rel * dt;
+    if (c.yr === undefined) { c.yr = c.y; if (c.changer) c.k = 0; }
+    c.yr += rel * dt;
+    c.y = c.yr + (c.k || 0) * (c.yr - P.y);
     if (c.changer && !c.shift) {
       if (!c.dir && c.y > -c.h + 2) {
         const opts = [c.lane - 1, c.lane + 1].filter(l => l >= 0 && l < LANES && laneFree(l, c.y - 30, c.y + c.h + 30));
@@ -401,6 +419,14 @@ function updCars(dt, rel) {
       }
     }
     if (c.shift) { c.shift.t += dt / 0.4; c.x = c.shift.from + (c.shift.to - c.shift.from) * Math.min(1, c.shift.t); if (c.shift.t >= 1) { c.shift = null; c.dir = 0; } }
+  }
+  // a faster car never drives into the one ahead of it: it tucks in behind
+  for (let l = 0; l < LANES; l++) {
+    const ln = cars.filter(c => c.lane === l).sort((a, b) => b.y - a.y);
+    for (let i = 1; i < ln.length; i++) {
+      const front = ln[i - 1], back = ln[i], lim = front.y - back.h - 4;
+      if (back.y > lim) { back.y = lim; back.yr = (lim + (back.k || 0) * P.y) / (1 + (back.k || 0)); }
+    }
   }
   cars = cars.filter(c => c.y < RH + 30 && !c.dead);
 }
@@ -440,8 +466,9 @@ function update(dt) {
   const mps = v / 3.6;
   dist += mps * dt;
   const ne = Math.floor(dist / STAGE_M) % ENV.length;
+  if (envT < 1) envT = Math.min(1, envT + dt / 4.5);
   if (ne !== envIdx) {
-    envIdx = ne; sfx('stage');
+    envFrom = envIdx; envT = 0; envIdx = ne; sfx('stage');
     banner = null;
   }
   // fuel
@@ -483,13 +510,14 @@ function update(dt) {
   if (bumpT > 0) bumpT -= dt;
   // fuel gauge: after a pothole the lost part lingers a moment, then drains away
   if (fuelHit > 0) fuelHit -= dt;
+  if (fuelGlow > 0) fuelGlow -= dt;
   if (fuelShown < fuel || fuelHit <= 0.55) fuelShown = fuelShown < fuel ? fuel : Math.max(fuel, fuelShown - dt * 40);
   // collisions & near misses
   const px0 = P.x - 4, px1 = P.x + 4, py0 = P.y + 1, py1 = P.y + 13;
   for (const c of cars) {
     const cx0 = c.x - c.w / 2 + 1, cx1 = c.x + c.w / 2 - 1, cy0 = c.y + 1, cy1 = c.y + c.h - 1;
     if (px0 < cx1 && px1 > cx0 && py0 < cy1 && py1 > cy0) {
-      if (c.fuel) { c.dead = true; fuel = Math.min(100, fuel + 35); bonus += 25; sfx('fuel'); floatText(c.x, c.y - 4, '+YAKIT', '#3bd16f'); continue; }
+      if (c.fuel) { c.dead = true; fuel = Math.min(100, fuel + 35); fuelGlow = 0.5; bonus += 25; sfx('fuel'); continue; }
       if (P.inv <= 0) { crash(c); break; }
     }
     if (!c.fuel && !c.passed && c.y > P.y + 14) {
@@ -505,7 +533,7 @@ function update(dt) {
   if (comboT > 0) { comboT -= dt; if (comboT <= 0) combo = 0; }
   // exhaust
   if (Math.random() < 0.5) parts.push({ x: P.x + rand(-2, 2), y: P.y + 14, vx: rand(-3, 3), vy: rand(10, 25), life: 0.35, max: 0.35, col: env().night ? '#55536a' : '#c9c7d8', smoke: true });
-  if (env().snow) for (let i = 0; i < 2; i++) flakes.push({ x: rand(0, RW), y: -2, vy: rand(30, 60), vx: rand(-10, 4), life: 6 });
+  if (Math.random() < envView().snowK) for (let i = 0; i < 2; i++) flakes.push({ x: rand(0, RW), y: -2, vy: rand(30, 60), vx: rand(-10, 4), life: 6 });
   tickParts(dt, abs);
   if (banner) { banner.t += dt; if (banner.t > 2.4) banner = null; }
   if (flashT > 0) flashT -= dt;
@@ -537,14 +565,14 @@ function drawDecor(d, E) {
 }
 // road, grass, lines and potholes: the flat layer (the 3D view uses it as the ground texture)
 function drawGround(g, top, bot) {
-  const E = env();
+  const E = envView();
   g.fillStyle = E.grass; g.fillRect(0, top, RW, bot - top);
   g.fillStyle = E.grass2;
   const so = Math.floor(scroll % 16);
   for (let y = top - 16 + so - ((top - 16) % 16 + 16) % 16; y < bot; y += 16) { g.fillRect(0, y, ROAD_L - 2, 8); g.fillRect(ROAD_R + 2, y, RW - ROAD_R - 2, 8); }
   if (!K3) for (const d of decor) drawDecor(d, E);
   // shoulder & road
-  g.fillStyle = E.snow ? '#9aa6b2' : '#6f6c78'; g.fillRect(ROAD_L - 2, top, 2, bot - top); g.fillRect(ROAD_R, top, 2, bot - top);
+  g.fillStyle = mixHex('#6f6c78', '#9aa6b2', E.snowK); g.fillRect(ROAD_L - 2, top, 2, bot - top); g.fillRect(ROAD_R, top, 2, bot - top);
   g.fillStyle = E.road; g.fillRect(ROAD_L, top, ROAD_R - ROAD_L, bot - top);
   // kerb stripes
   for (let y = top - 8 - ((top - 8) % 8 + 8) % 8 + Math.floor(scroll % 8); y < bot; y += 8) {
@@ -555,7 +583,7 @@ function drawGround(g, top, bot) {
   g.fillStyle = E.line;
   const lo = Math.floor(scroll % 14);
   for (let l = 1; l < LANES; l++) { const x = ROAD_L + l * LANE_W - 1; for (let y = top - 14 - ((top - 14) % 14 + 14) % 14 + lo; y < bot; y += 14) g.fillRect(x, y, 1, 7); }
-  if (E.snow) { g.fillStyle = 'rgba(255,255,255,0.25)'; for (let y = top - 10 - ((top - 10) % 10 + 10) % 10 + Math.floor(scroll % 10); y < bot; y += 10) { g.fillRect(ROAD_L + 4, y, 2, 1); g.fillRect(ROAD_R - 9, y + 5, 3, 1); } }
+  if (E.snowK > 0) { g.fillStyle = `rgba(255,255,255,${0.25 * E.snowK})`; for (let y = top - 10 - ((top - 10) % 10 + 10) % 10 + Math.floor(scroll % 10); y < bot; y += 10) { g.fillRect(ROAD_L + 4, y, 2, 1); g.fillRect(ROAD_R - 9, y + 5, 3, 1); } }
   // potholes
   for (const h of holes) {
     const x = Math.round(h.x - h.w / 2), y = Math.round(h.y), w = Math.round(h.w);
@@ -568,8 +596,8 @@ function drawGround(g, top, bot) {
 }
 // 3D view: soft drop shadows to the lower right, drawn on whole pixels so they move exactly with the objects
 function paintShadows(g, E) {
-  if (E.night) return;
-  const a = E.fog ? 0.12 : 0.24;
+  const a = (0.24 - 0.12 * E.fogK) * (1 - E.nightK);
+  if (a < 0.01) return;
   g.fillStyle = `rgba(10,20,10,${a})`;
   for (const d of decor) {
     const x = d.x + 3, y = Math.round(d.y) + 5, s = d.type === 'tree' ? 1.2 + d.h * 0.5 : 0.8;
@@ -590,7 +618,7 @@ function paintShadows(g, E) {
   }
 }
 function drawWorld() {
-  const E = env();
+  const E = envView();
   drawGround(b, 0, RH);
   // traffic
   for (const c of cars) {
@@ -617,11 +645,11 @@ function drawWorld() {
   for (const p of parts) { b.globalAlpha = clamp(p.life / p.max, 0, 1); b.fillStyle = p.col; b.fillRect(Math.round(p.x), Math.round(p.y), 1, 1); }
   b.globalAlpha = 1;
   // lighting
-  if (E.tint) { b.fillStyle = E.tint; b.fillRect(0, 0, RW, RH); }
-  if (E.night) {
+  if (E.tintK > 0) { b.globalAlpha = E.tintK; b.fillStyle = E.tint; b.fillRect(0, 0, RW, RH); b.globalAlpha = 1; }
+  if (E.nightK > 0) {
     sh.globalCompositeOperation = 'source-over';
     sh.clearRect(0, 0, RW, RH);
-    sh.fillStyle = 'rgba(3,4,14,0.86)'; sh.fillRect(0, 0, RW, RH);
+    sh.fillStyle = `rgba(3,4,14,${0.86 * E.nightK})`; sh.fillRect(0, 0, RW, RH);
     sh.globalCompositeOperation = 'destination-out';
     if (P && P.alive) {
       const g = sh.createLinearGradient(0, P.y, 0, P.y - 78);
@@ -649,10 +677,10 @@ function drawWorld() {
       b.fillStyle = 'rgba(255,43,43,0.35)'; b.fillRect(x + 1, y - 1, 3, 3); b.fillRect(x + c.w - 4, y - 1, 3, 3);
     }
   }
-  if (E.fog) {
+  if (E.fogK > 0) {
     const g = b.createLinearGradient(0, 0, 0, RH * 0.72);
     g.addColorStop(0, 'rgba(226,230,238,0.97)'); g.addColorStop(0.55, 'rgba(226,230,238,0.75)'); g.addColorStop(1, 'rgba(226,230,238,0)');
-    b.fillStyle = g; b.fillRect(0, 0, RW, RH * 0.72);
+    b.globalAlpha = E.fogK; b.fillStyle = g; b.fillRect(0, 0, RW, RH * 0.72); b.globalAlpha = 1;
   }
   if (flakes.length) { b.fillStyle = '#ffffff'; for (const f of flakes) b.fillRect(Math.round(f.x), Math.round(f.y), 1, 1); }
 }
@@ -666,7 +694,7 @@ function drawHUD() {
   const hit = fuelHit > 0, fx = 24 + (hit && fuelHit > 0.35 ? (Math.floor(clock * 30) % 2 ? 1 : -1) : 0);
   b.fillStyle = '#2c2b55'; b.fillRect(fx, 10, 34, 5);
   if (fuelShown > fuel) { b.fillStyle = '#7a1c1c'; b.fillRect(fx, 10, Math.round(34 * fuelShown / 100), 5); }
-  const fc = hit ? '#ff3b3b' : fuel < 25 ? (Math.floor(clock * 4) % 2 ? '#ff3b3b' : '#7a1c1c') : '#3bd16f';
+  const fc = hit ? '#ff3b3b' : fuelGlow > 0 ? (Math.floor(clock * 16) % 2 ? '#b8ffd0' : '#3bd16f') : fuel < 25 ? (Math.floor(clock * 4) % 2 ? '#ff3b3b' : '#7a1c1c') : '#3bd16f';
   b.fillStyle = fc; b.fillRect(fx, 10, Math.round(34 * fuel / 100), 5);
   // lives
   for (let i = 0; i < 3; i++) { b.fillStyle = i < lives ? '#ff3d7f' : '#2c2b55'; b.fillRect(64 + i * 6, 10, 4, 5); b.fillStyle = i < lives ? '#6fc7ff' : '#2c2b55'; b.fillRect(65 + i * 6, 11, 2, 1); }
@@ -852,25 +880,25 @@ let _m4, _q, _p, _s, _e;
 function inst(mesh, i, x, y, z, sx, sy, sz, ry) { _e.set(0, ry || 0, 0); _q.setFromEuler(_e); _p.set(x, y, z); _s.set(sx, sy, sz); _m4.compose(_p, _q, _s); mesh.setMatrixAt(i, _m4); }
 function hashN(n) { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); }
 function applyEnv3(E) {
-  const night = !!E.night, snow = !!E.snow;
+  const n = E.nightK, f = E.fogK, sn = E.snowK, ti = E.tintK;
   K3.renderer.setClearColor(E.grass, 1);
-  K3.amb.intensity = night ? 0.2 : E.fog ? 0.62 : 0.48;
-  K3.hemi.intensity = night ? 0.12 : 0.36;
-  K3.sun.intensity = night ? 0.08 : E.fog ? 0.35 : 0.85;
-  K3.sun.color.set(E.tint ? '#ffb27a' : night ? '#7d8ccf' : '#fff2dc');
+  K3.amb.intensity = 0.48 + 0.14 * f - 0.28 * n;
+  K3.hemi.intensity = 0.36 - 0.24 * n;
+  K3.sun.intensity = Math.max(0.08, 0.85 - 0.5 * f - 0.77 * n);
+  K3.sun.color.set('#fff2dc').lerp(new THREE.Color('#ffb27a'), ti).lerp(new THREE.Color('#7d8ccf'), n);
   K3.sun.castShadow = false;
-  K3.head.intensity = night ? 5 : 0;
-  K3.plight.intensity = night ? 1.3 : 0;
-  for (const l of K3.lamps) l.intensity = night ? 2.4 : 0;
-  K3.bulb.material.emissiveIntensity = night ? 1.4 : 0;
-  K3.leaf.material.color.set(snow ? '#e8eef5' : night ? '#1b4a28' : '#24702f');
-  K3.bush.material.color.set(snow ? '#c9d4df' : night ? '#1d4a2b' : '#2f7d36');
-  K3.rock.material.color.set(snow ? '#9aa6b2' : '#7c7a86');
-  for (const k in K3.mats) { const m = K3.mats[k]; if (m.emissive && m.userData.tail) m.emissiveIntensity = night ? 2.2 : 0.5; }
+  K3.head.intensity = 5 * n; K3.plight.intensity = 1.3 * n;
+  for (const l of K3.lamps) l.intensity = 2.4 * n;
+  K3.bulb.material.emissiveIntensity = 1.4 * n;
+  const two = (day, snow, night) => { const c = new THREE.Color(day).lerp(new THREE.Color(snow), sn); return c.lerp(new THREE.Color(night), n); };
+  K3.leaf.material.color.copy(two('#24702f', '#e8eef5', '#1b4a28'));
+  K3.bush.material.color.copy(two('#2f7d36', '#c9d4df', '#1d4a2b'));
+  K3.rock.material.color.copy(two('#7c7a86', '#9aa6b2', '#5c5a66'));
+  for (const k in K3.mats) { const m = K3.mats[k]; if (m.emissive && m.userData.tail) m.emissiveIntensity = 0.5 + 1.7 * n; }
 }
 function render3() {
-  const E = env();
-  if (K3.envSet !== envIdx) { K3.envSet = envIdx; applyEnv3(E); }
+  const E = envView();
+  const ek = envIdx + ':' + envT; if (K3.envSet !== ek) { K3.envSet = ek; applyEnv3(E); }
   // ground texture
   const g = K3.gg; g.setTransform(1, 0, 0, 1, 0, GM);
   drawGround(g, -GM, RH + GM);
@@ -913,7 +941,7 @@ function render3() {
       if (!c.fuel) m.scale.y = 1.5;
       if (!c.fuel) { signalBits(m, c); for (const tl of m.userData.parts.tail) tl.material.userData.tail = true; }
       K3.scene.add(m); K3.pool.set(c, m);
-      if (!c.fuel) for (const tl of m.userData.parts.tail) tl.material.emissiveIntensity = E.night ? 2.2 : 0.5;
+      if (!c.fuel) for (const tl of m.userData.parts.tail) tl.material.emissiveIntensity = 0.5 + 1.7 * E.nightK;
     }
     seen.add(c);
     m.position.set(Math.round(c.x), 0, wz(Math.round(c.y) + c.h / 2));
@@ -943,15 +971,15 @@ function render3() {
 }
 // what the 2D layer still draws over the 3D view: sparks, light tint, fog, snow
 function drawOverlay() {
-  const E = env();
+  const E = envView();
   b.clearRect(0, 0, RW, RH);
   for (const p of parts) { b.globalAlpha = clamp(p.life / p.max, 0, 1); b.fillStyle = p.col; b.fillRect(Math.round(p.x), Math.round(p.y), 1, 1); }
   b.globalAlpha = 1;
-  if (E.tint) { b.fillStyle = E.tint; b.fillRect(0, 0, RW, RH); }
-  if (E.fog) {
+  if (E.tintK > 0) { b.globalAlpha = E.tintK; b.fillStyle = E.tint; b.fillRect(0, 0, RW, RH); b.globalAlpha = 1; }
+  if (E.fogK > 0) {
     const g = b.createLinearGradient(0, 0, 0, RH * 0.72);
     g.addColorStop(0, 'rgba(226,230,238,0.97)'); g.addColorStop(0.55, 'rgba(226,230,238,0.75)'); g.addColorStop(1, 'rgba(226,230,238,0)');
-    b.fillStyle = g; b.fillRect(0, 0, RW, RH * 0.72);
+    b.globalAlpha = E.fogK; b.fillStyle = g; b.fillRect(0, 0, RW, RH * 0.72); b.globalAlpha = 1;
   }
   if (flakes.length) { b.fillStyle = '#ffffff'; for (const f of flakes) b.fillRect(Math.round(f.x), Math.round(f.y), 1, 1); }
 }
