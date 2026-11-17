@@ -154,6 +154,7 @@ img,canvas,svg{-webkit-user-drag:none}
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
 (() => {
 'use strict';
@@ -168,7 +169,8 @@ const f1 = n => (Math.round(n * 10) / 10).toLocaleString('tr-TR', { minimumFract
 /* ---------- layout ---------- */
 const W = 360, TOPH = 54;
 let H = 640, S = 1, DPR = 1, GH = 512, PH = 128;
-const stage = $('stage'), wrap = $('wrap'), cv = $('cv'), ctx = cv.getContext('2d');
+const stage = $('stage'), wrap = $('wrap'), cv = $('cv'), mainCtx = cv.getContext('2d');
+let ctx = mainCtx;
 function resize() {
   const sw = stage.clientWidth, sh = stage.clientHeight;
   const ww = Math.min(sw, Math.round(sh * 0.6));
@@ -179,6 +181,7 @@ function resize() {
   cv.style.width = ww + 'px'; cv.style.height = sh + 'px';
   PH = Math.max(96, Math.round(H * 0.2)); GH = H - PH;
   $('panel').style.height = (PH * S) + 'px';
+  if (K3) sizeT3();
 }
 
 /* ---------- missions ---------- */
@@ -419,7 +422,7 @@ function drawLander() {
   }
   ctx.restore();
 }
-function drawWorld() {
+function drawSky() {
   // sky
   if (M.sky) { const g = ctx.createLinearGradient(0, TOPH, 0, GH); g.addColorStop(0, M.sky[0]); g.addColorStop(1, M.sky[1]); ctx.fillStyle = g; }
   else ctx.fillStyle = '#05070b';
@@ -429,6 +432,10 @@ function drawWorld() {
   if (M.earth) { const x = W * 0.78, y = TOPH + 46; ctx.fillStyle = '#2b6cb0'; ctx.beginPath(); ctx.arc(x, y, 13, 0, TAU); ctx.fill(); ctx.fillStyle = '#e8eef5'; ctx.globalAlpha = 0.7; ctx.beginPath(); ctx.arc(x - 3, y - 3, 4, 0, TAU); ctx.arc(x + 5, y + 4, 3, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(5,7,11,0.85)'; ctx.beginPath(); ctx.arc(x + 6, y, 13, -Math.PI / 2, Math.PI / 2); ctx.fill(); }
   if (M.jupiter) { const x = W * 0.25, y = TOPH + 70; ctx.save(); ctx.beginPath(); ctx.arc(x, y, 42, 0, TAU); ctx.clip(); for (let i = -6; i < 7; i++) { ctx.fillStyle = i % 2 ? '#c9a27a' : '#e8d2b0'; ctx.fillRect(x - 44, y + i * 7, 88, 7); } ctx.fillStyle = '#b5543a'; ctx.beginPath(); ctx.ellipse(x + 12, y + 12, 8, 5, 0, 0, TAU); ctx.fill(); ctx.restore(); }
   if (M.sun) { const g = ctx.createRadialGradient(W * 0.8, TOPH + 40, 0, W * 0.8, TOPH + 40, 70); g.addColorStop(0, 'rgba(255,250,230,1)'); g.addColorStop(0.2, 'rgba(255,230,170,0.7)'); g.addColorStop(1, 'rgba(255,230,170,0)'); ctx.fillStyle = g; ctx.fillRect(W * 0.8 - 70, TOPH - 30, 140, 140); }
+}
+function drawWorld() {
+  if (!K3) drawSky();
+  if (!K3) {
   // terrain
   const x0 = cam.x - W / 2 / cam.ppm, x1 = cam.x + W / 2 / cam.ppm;
   const i0 = Math.max(0, Math.floor(x0 / STEP) - 1), i1 = Math.min(T.h.length - 1, Math.ceil(x1 / STEP) + 1);
@@ -449,6 +456,12 @@ function drawWorld() {
     ctx.fillStyle = blink ? '#7dff9b' : '#2a5a36'; ctx.beginPath(); ctx.arc(a, y - 3, 2, 0, TAU); ctx.arc(b, y - 3, 2, 0, TAU); ctx.fill();
     txt('×' + p.mult, (a + b) / 2, y + 14, '700 11px "Red Hat Mono", monospace', '#7dff9b', 'center');
   }
+  }
+  if (K3) for (const p of T.pads) {
+    const a = sx(p.x0), b = sx(p.x1);
+    if (b < -20 || a > W + 20) continue;
+    txt('×' + p.mult, (a + b) / 2, sy(p.y) + 14, '700 11px "Red Hat Mono", monospace', '#7dff9b', 'center');
+  }
   if (M.haze) { const g = ctx.createLinearGradient(0, TOPH, 0, GH); g.addColorStop(0, 'rgba(197,154,82,0.55)'); g.addColorStop(1, 'rgba(197,154,82,0.15)'); ctx.fillStyle = g; ctx.fillRect(0, TOPH, W, GH - TOPH); }
   // particles
   for (const p of parts) {
@@ -460,7 +473,7 @@ function drawWorld() {
     else { ctx.save(); ctx.translate(X, Y); ctx.rotate(p.rot); ctx.fillStyle = '#f2c14e'; const s = Math.max(2, cam.ppm * 1.2); ctx.fillRect(-s / 2, -s / 3, s, s * 0.66); ctx.restore(); }
   }
   ctx.globalAlpha = 1;
-  if (L && L.alive) drawLander();
+  if (L && L.alive && !K3) drawLander();
 }
 function gauge(label, value, unit, x, y, w, col) {
   ctx.fillStyle = '#0a0d11'; ctx.fillRect(x, y, w, 40);
@@ -496,13 +509,155 @@ function drawHUD() {
   if (outcome && outcome.ok && endT > 0) txt('KARTAL KONDU', W / 2, TOPH + (GH - TOPH) * 0.35, '400 20px "Archivo Black", sans-serif', '#7dff9b', 'center', '2px');
 }
 function render(dt) {
-  ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
+  const k3 = initT3();
   if (L) updCam(dt);
+  if (k3 && T && L) {
+    // sky on the canvas below the 3D view
+    ctx = K3.bctx; ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
+    ctx.save(); ctx.beginPath(); ctx.rect(0, TOPH, W, GH - TOPH); ctx.clip(); drawSky(); ctx.restore();
+    ctx = mainCtx;
+    render3();
+  }
+  ctx.setTransform(S * DPR, 0, 0, S * DPR, 0, 0);
+  if (k3) ctx.clearRect(0, 0, W, H);
   ctx.save(); ctx.beginPath(); ctx.rect(0, TOPH, W, GH - TOPH); ctx.clip();
   if (T && L) drawWorld(); else { ctx.fillStyle = '#05070b'; ctx.fillRect(0, 0, W, GH); }
   ctx.restore();
   if (L && state !== 'menu') drawHUD();
   else { ctx.fillStyle = '#0c0e12'; ctx.fillRect(0, 0, W, TOPH); }
+}
+
+/* ---------- 3D view (Three.js) ----------
+   Side view through an orthographic camera pitched slightly down. The terrain is the 2D height profile pushed back
+   into depth, so its front edge is exactly the profile the physics uses (z = 0) and the ground behind it shows as a
+   receding surface. Sky stays on a 2D canvas below; HUD, labels, haze and particles on the 2D canvas above. */
+const PITCH = 0.36, CP = Math.cos(PITCH), SP = Math.sin(PITCH);
+const ZROWS = [0, -5, -12, -22, -36, -54, -78, -108, -146];
+let K3 = null;
+function initT3() {
+  if (K3 !== null) return K3;
+  K3 = false;
+  if (typeof THREE === 'undefined') return K3;
+  try {
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setClearColor(0x000000, 0);
+    const bgc = document.createElement('canvas');
+    for (const el of [bgc, renderer.domElement]) { el.style.position = 'absolute'; el.style.left = '0'; el.style.top = '0'; wrap.insertBefore(el, cv); }
+    cv.style.position = 'relative';
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 4000);
+    camera.position.set(0, 1500 * SP, 1500 * CP); camera.up.set(0, 1, 0); camera.lookAt(0, 0, 0);
+    const amb = new THREE.AmbientLight(0xffffff, 0.3); scene.add(amb);
+    const sun = new THREE.DirectionalLight(0xffffff, 1); sun.position.set(-0.6, 0.75, 0.55); scene.add(sun);
+    const glow = new THREE.PointLight(0xffb15a, 0, 60, 1.4); scene.add(glow);
+    K3 = { renderer, scene, camera, amb, sun, glow, bgc, bctx: bgc.getContext('2d'), T: null };
+    K3.lander = landerModel(); scene.add(K3.lander);
+  } catch (e) { K3 = false; }
+  return K3;
+}
+function sizeT3() {
+  if (!K3) return;
+  K3.renderer.setPixelRatio(DPR);
+  K3.renderer.setSize(Math.round(W * S), Math.round(H * S));
+  K3.bgc.width = cv.width; K3.bgc.height = cv.height; K3.bgc.style.width = cv.style.width; K3.bgc.style.height = cv.style.height;
+}
+function shade(hex, k) { const c = new THREE.Color(hex); return c.multiplyScalar(k); }
+function buildTerrain3() {
+  if (K3.terrain) { for (const o of K3.terrain) { K3.scene.remove(o); o.geometry.dispose(); } }
+  K3.terrain = [];
+  const N = T.h.length, R = ZROWS.length, pos = [], col = [], idx = [];
+  const top = new THREE.Color(M.ground[0]), deep = new THREE.Color(M.ground[1]);
+  const onPad = x => T.pads.some(p => x >= p.x0 - STEP && x <= p.x1 + STEP);
+  for (let k = 0; k < R; k++) {
+    const z = ZROWS[k], d = k / (R - 1);
+    for (let i = 0; i < N; i++) {
+      const x = i * STEP;
+      let y = T.h[i];
+      if (k > 0 && !(onPad(x) && k <= 4)) y += M.amp * 0.32 * d * (Math.sin(x / 61 + k * 1.9) * 0.6 + Math.sin(x / 29 - k * 2.7) * 0.3 * M.rough);
+      pos.push(x, y, z);
+      const c = top.clone().lerp(deep, d * 0.45); col.push(c.r, c.g, c.b);
+    }
+  }
+  for (let k = 0; k < R - 1; k++) for (let i = 0; i < N - 1; i++) { const a = k * N + i, b = a + 1, c = a + N, e = c + 1; idx.push(a, b, e, a, e, c); }
+  // front face: the profile dropped to the bottom of the world
+  const base = R * N, low = Math.min(...T.h) - 600;
+  for (let i = 0; i < N; i++) {
+    pos.push(i * STEP, T.h[i], 0.01, i * STEP, low, 0.01);
+    const c1 = deep.clone().lerp(top, 0.35), c2 = deep.clone().multiplyScalar(0.35); col.push(c1.r, c1.g, c1.b, c2.r, c2.g, c2.b);
+  }
+  for (let i = 0; i < N - 1; i++) { const a = base + i * 2, b = a + 1, c = a + 2, e = a + 3; idx.push(a, b, c, c, b, e); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+  g.computeVertexNormals();
+  const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0, side: THREE.DoubleSide }));
+  // the exact surface the lander touches, traced in light
+  const lp = []; for (let i = 0; i < N; i++) lp.push(i * STEP, T.h[i], 0.2);
+  const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+  const line = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }));
+  K3.terrain.push(mesh, line);
+  // landing pads: lit slabs with end beacons
+  const padMat = new THREE.MeshStandardMaterial({ color: 0x3f8f55, emissive: 0x2f7a45, emissiveIntensity: 0.6, roughness: 0.6 });
+  K3.beacons = [];
+  for (const p of T.pads) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(p.x1 - p.x0, 1.2, 26), padMat); s.position.set((p.x0 + p.x1) / 2, p.y + 0.3, -12.5); K3.terrain.push(s);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(p.x1 - p.x0, 0.4, 1.6), new THREE.MeshBasicMaterial({ color: 0x7dff9b })); stripe.position.set((p.x0 + p.x1) / 2, p.y + 1, 0.4); K3.terrain.push(stripe);
+    for (const x of [p.x0, p.x1]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 4, 6), new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.5 })); post.position.set(x, p.y + 2, 0); K3.terrain.push(post);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(1.1, 10, 8), new THREE.MeshBasicMaterial({ color: 0x7dff9b })); bulb.position.set(x, p.y + 4.4, 0); K3.terrain.push(bulb); K3.beacons.push(bulb);
+    }
+  }
+  for (const o of K3.terrain) K3.scene.add(o);
+  // light per world: harsh sun on airless bodies, softer under an atmosphere
+  const L3 = { Ay: [0xfff8ee, 1.25, 0.16], Mars: [0xffd2a8, 1.0, 0.32], Europa: [0xe6f2ff, 1.1, 0.22], Titan: [0xffc070, 0.75, 0.42], 'Merkür': [0xfffbea, 1.5, 0.12] }[M.body] || [0xffffff, 1, 0.25];
+  K3.sun.color.set(L3[0]); K3.sun.intensity = L3[1]; K3.amb.intensity = L3[2];
+  K3.T = T;
+}
+function landerModel() {
+  const g = new THREE.Group();
+  const foil = new THREE.MeshStandardMaterial({ color: 0xe0ac45, roughness: 0.35, metalness: 0.65, flatShading: true });
+  const hull = new THREE.MeshStandardMaterial({ color: 0xd6dbe2, roughness: 0.5, metalness: 0.2, flatShading: true });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2a313b, roughness: 0.4, metalness: 0.3 });
+  const strut = new THREE.MeshStandardMaterial({ color: 0xc9d1db, roughness: 0.4, metalness: 0.5 });
+  const desc = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 2.9, 2.2, 8), foil); desc.position.y = -0.5; desc.rotation.y = Math.PI / 8; g.add(desc);
+  const asc = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2.5, 3.1, 6), hull); asc.position.y = 2.1; g.add(asc);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(1.6, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), hull); cap.position.y = 3.6; cap.scale.y = 0.45; g.add(cap);
+  const win = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.9, 0.3), dark); win.position.set(-0.6, 2.6, 2.2); win.rotation.x = -0.15; g.add(win);
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 4), strut); ant.position.set(0.3, 4.6, 0); g.add(ant);
+  const dish = new THREE.Mesh(new THREE.ConeGeometry(0.7, 0.4, 8, 1, true), strut); dish.position.set(0.3, 5.3, 0); dish.rotation.x = Math.PI; g.add(dish);
+  const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 1.3, 1, 10, 1, true), dark); noz.position.y = -2.1; g.add(noz);
+  // four legs, feet at x = ±4.2 like the physics
+  for (const [x, z] of [[-4.2, 2.6], [4.2, 2.6], [-4.2, -2.6], [4.2, -2.6]]) {
+    const a = new THREE.Vector3(x * 0.6, -0.4, z * 0.6), b = new THREE.Vector3(x, -3.4, z);
+    const len = a.distanceTo(b), leg = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, len, 5), strut);
+    leg.position.copy(a).add(b).multiplyScalar(0.5); leg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()); g.add(leg);
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.9, 0.25, 8), strut); foot.position.set(x, -3.5, z); g.add(foot);
+  }
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(1.05, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xffc46a, transparent: true, opacity: 0.85, depthWrite: false }));
+  flame.rotation.x = Math.PI; g.add(flame);
+  const core = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff4dc, transparent: true, opacity: 0.95, depthWrite: false }));
+  core.rotation.x = Math.PI; g.add(core);
+  g.userData = { flame, core };
+  return g;
+}
+function render3() {
+  if (K3.T !== T) buildTerrain3();
+  const p = cam.ppm, c = K3.camera, mid = TOPH + (GH - TOPH) / 2;
+  c.left = cam.x - W / 2 / p; c.right = cam.x + W / 2 / p;
+  c.top = (cam.y + mid / p) * CP; c.bottom = (cam.y + (mid - H) / p) * CP;
+  c.updateProjectionMatrix();
+  const on = Math.floor(clock * 2) % 2 === 0;
+  for (const b of K3.beacons) b.material.color.set(on ? 0x7dff9b : 0x2a5a36);
+  const lm = K3.lander;
+  lm.visible = !!(L && L.alive);
+  if (L) {
+    lm.position.set(L.x, L.y, 0); lm.rotation.set(0, 0.35, -L.a);
+    const f = lm.userData.flame, k = lm.userData.core, th = L.thrusting && L.alive;
+    f.visible = k.visible = th;
+    if (th) { const len = 4.5 + Math.random() * 3; f.scale.set(1, len, 1); f.position.y = -2.6 - len / 2; k.scale.set(1, len * 0.55, 1); k.position.y = -2.6 - len * 0.275; }
+    K3.glow.intensity = th ? 0.9 : 0;
+    const [gx, gy] = localToWorld(0, -6); K3.glow.position.set(gx, gy, 4);
+  }
+  K3.renderer.render(K3.scene, K3.camera);
 }
 
 /* ---------- input ---------- */
@@ -602,6 +757,7 @@ function frame(now) {
 }
 window.addEventListener('resize', resize);
 makeStars();
+initT3();
 resize();
 toMenu();
 setMuteUI();

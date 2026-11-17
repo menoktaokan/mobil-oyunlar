@@ -10,11 +10,11 @@ Telefonda dikey ekranda oynanmak üzere yapılmış tarayıcı oyunları. Her oy
 | Yörünge Avcısı 3D | Uzay nişancısı | [`yorunge-avcisi/`](yorunge-avcisi/) |
 | Menzil 600 3D | Keskin nişancı | [`menzil-600/`](menzil-600/) |
 | Fener Kalesi 3D | Kule savunması, 3d kuleler | [`fener-kalesi/`](fener-kalesi/) |
-| Otoban 84 | Retro trafik yarışı | [`otoban-84/`](otoban-84/) |
-| Çini Kırma | Tuğla kırma | [`cini-kirma/`](cini-kirma/) |
+| Otoban 84 3D | Retro trafik yarışı | [`otoban-84/`](otoban-84/) |
+| Çini Kırma 3D | Tuğla kırma | [`cini-kirma/`](cini-kirma/) |
 | Akide Patlat 3D | Balon patlatma | [`akide-patlat/`](akide-patlat/) |
-| Göktaşı | Göktaşı avı | [`goktasi/`](goktasi/) |
-| İniş Penceresi | Ay'a iniş | [`inis-penceresi/`](inis-penceresi/) |
+| Göktaşı 3D | Göktaşı avı | [`goktasi/`](goktasi/) |
+| İniş Penceresi 3D | Ay'a iniş | [`inis-penceresi/`](inis-penceresi/) |
 | Lunapark Pinball | Pinball | [`lunapark-pinball/`](lunapark-pinball/) |
 | Sazlık Avı | Ördek avı | [`sazlik-avi/`](sazlik-avi/) |
 | Mahalle Kedisi 3D | Labirent kaçışı | [`mahalle-kedisi/`](mahalle-kedisi/) |

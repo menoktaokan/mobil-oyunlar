@@ -19,10 +19,10 @@ OYUNLAR
 • Devre Kaçağı 3D: Devre kartı labirentinde kayarak kaç. Kaydır, duvara kadar git, lehimleri topla.
 • Mahalle Kedisi 3D: Sokaklardaki mamaları topla, köpeklerden kaç; ciğeri kapınca sıra sende.
 • Akide Patlat 3D: Akide fırlat, aynı renkten üçünü yan yana getirip patlat, kavanozları boşalt.
-• Otoban 84: Retro otoyolda şerit değiştir, yakıtı topla, kıl payı geçişlerle puanı katla.
-• Çini Kırma: Topu sektirip çini desenlerini kır.
-• Göktaşı: Gemini yönet, göktaşlarını parçala, uçan dairelere yakalanma.
-• İniş Penceresi: Yakıtı idareli kullan, aracı dar pistlere yumuşakça indir.
+• Otoban 84 3D: Retro otoyolda şerit değiştir, yakıtı topla, kıl payı geçişlerle puanı katla.
+• Çini Kırma 3D: Topu sektirip çini desenlerini kır.
+• Göktaşı 3D: Gemini yönet, göktaşlarını parçala, uçan dairelere yakalanma.
+• İniş Penceresi 3D: Yakıtı idareli kullan, aracı dar pistlere yumuşakça indir.
 • Lunapark Pinball: Lunapark temalı pinball masası.
 • Sazlık Avı: Sazlıktan havalanan ördekleri yakala.
 
