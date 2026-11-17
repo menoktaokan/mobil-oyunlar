@@ -305,6 +305,7 @@ let state = 'menu';
 let P = null, cars = [], parts = [], decor = [], flakes = [];
 let v = 110, dist = 0, scroll = 0, rowAcc = 0, nextGap = 60, safe = 1, fuel = 100, lives = 3, bonus = 0, nearN = 0, combo = 0, comboT = 0;
 let holes = [], holeAcc = 0, nextHole = 400, bumpT = 0;
+let fuelHit = 0, fuelShown = 100;
 let topV = 0, envIdx = 0, banner = null, flashT = 0, clock = 0, fuelAcc = 0, lowWarned = false, decorAcc = 0, endT = 0, endReason = '';
 const TV = 55, VMAX = 235, K = 1.25;
 
@@ -312,6 +313,7 @@ function newPlayer() { return { lane: 1, x: laneX(1), y: PY, from: 1, changeT: 9
 function reset() {
   P = newPlayer(); cars = []; parts = []; flakes = [];
   v = 110; dist = 0; scroll = 0; rowAcc = 0; nextGap = 50; safe = 1; safeRun = 0; lastGap = 1; fuel = 100; lives = 3; bonus = 0; nearN = 0; combo = 0; comboT = 0;
+  fuelHit = 0; fuelShown = 100;
   topV = 0; envIdx = 0; banner = null; flashT = 0; fuelAcc = 0; lowWarned = false; endT = 0; floats.length = 0;
   holes = []; holeAcc = 0; nextHole = rand(700, 1100); bumpT = 0;
   decor = []; for (let y = -20; y < RH + 20; y += 14) addDecor(y);
@@ -472,13 +474,16 @@ function update(dt) {
   for (const h of holes) {
     h.y += abs * dt;
     if (!h.hit && Math.abs(h.x - P.x) < 4 + h.w / 2 && h.y > P.y && h.y < P.y + 14 && P.alive) {
-      h.hit = true; v = Math.max(80, v * 0.92); fuel = Math.max(0, fuel - 12); bumpT = 0.3; sfx('bump');
+      h.hit = true; v = Math.max(80, v * 0.92); fuel = Math.max(0, fuel - 12); fuelHit = 0.75; bumpT = 0.3; sfx('bump');
       try { navigator.vibrate && navigator.vibrate(40); } catch (e) {}
       for (let i = 0; i < 6; i++) parts.push({ x: h.x + rand(-3, 3), y: h.y, vx: rand(-20, 20), vy: rand(-30, 5), life: 0.4, max: 0.4, col: '#6b6575' });
     }
   }
   holes = holes.filter(h => h.y < RH + 12);
   if (bumpT > 0) bumpT -= dt;
+  // fuel gauge: after a pothole the lost part lingers a moment, then drains away
+  if (fuelHit > 0) fuelHit -= dt;
+  if (fuelShown < fuel || fuelHit <= 0.55) fuelShown = fuelShown < fuel ? fuel : Math.max(fuel, fuelShown - dt * 40);
   // collisions & near misses
   const px0 = P.x - 4, px1 = P.x + 4, py0 = P.y + 1, py1 = P.y + 13;
   for (const c of cars) {
@@ -658,9 +663,11 @@ function drawHUD() {
   text(b, Math.round(v) + ' KM/SA', RW / 2, 3, v > 200 ? '#ff3d7f' : '#29e0ff', 1, 'center');
   // fuel
   text(b, 'YAKIT', 3, 10, '#9b97c4');
-  b.fillStyle = '#2c2b55'; b.fillRect(24, 10, 34, 5);
-  const fc = fuel < 25 ? (Math.floor(clock * 4) % 2 ? '#ff3b3b' : '#7a1c1c') : '#3bd16f';
-  b.fillStyle = fc; b.fillRect(24, 10, Math.round(34 * fuel / 100), 5);
+  const hit = fuelHit > 0, fx = 24 + (hit && fuelHit > 0.35 ? (Math.floor(clock * 30) % 2 ? 1 : -1) : 0);
+  b.fillStyle = '#2c2b55'; b.fillRect(fx, 10, 34, 5);
+  if (fuelShown > fuel) { b.fillStyle = '#7a1c1c'; b.fillRect(fx, 10, Math.round(34 * fuelShown / 100), 5); }
+  const fc = hit ? '#ff3b3b' : fuel < 25 ? (Math.floor(clock * 4) % 2 ? '#ff3b3b' : '#7a1c1c') : '#3bd16f';
+  b.fillStyle = fc; b.fillRect(fx, 10, Math.round(34 * fuel / 100), 5);
   // lives
   for (let i = 0; i < 3; i++) { b.fillStyle = i < lives ? '#ff3d7f' : '#2c2b55'; b.fillRect(64 + i * 6, 10, 4, 5); b.fillStyle = i < lives ? '#6fc7ff' : '#2c2b55'; b.fillRect(65 + i * 6, 11, 2, 1); }
   if (combo > 1) text(b, '×' + combo, 85, 10, '#ffd23f');
